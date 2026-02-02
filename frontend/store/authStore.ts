@@ -171,7 +171,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     try {
-      await SecureStore.deleteItemAsync('auth_token');
+      await storage.deleteItem('auth_token');
       delete api.defaults.headers.common['Authorization'];
       set({ user: null, token: null });
     } catch (error) {
