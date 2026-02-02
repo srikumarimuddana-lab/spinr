@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { useFonts, PlusJakartaSans_400Regular, PlusJakartaSans_500Medium, PlusJakartaSans_600SemiBold, PlusJakartaSans_700Bold } from '@expo-google-fonts/plus-jakarta-sans';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import SpinrConfig from '../config/spinr.config';
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     PlusJakartaSans_400Regular,
     PlusJakartaSans_500Medium,
     PlusJakartaSans_600SemiBold,
@@ -16,15 +16,36 @@ export default function RootLayout() {
   });
 
   const { initialize, isInitialized } = useAuthStore();
+  const [initError, setInitError] = useState<string | null>(null);
 
   useEffect(() => {
-    initialize();
+    const init = async () => {
+      try {
+        console.log('Starting initialization...');
+        await initialize();
+        console.log('Initialization complete');
+      } catch (err: any) {
+        console.log('Init error:', err);
+        setInitError(err.message || 'Failed to initialize');
+      }
+    };
+    init();
   }, []);
 
+  // Handle font loading error
+  if (fontError) {
+    console.log('Font error:', fontError);
+  }
+
+  // Show loading while fonts load or auth initializes
   if (!fontsLoaded || !isInitialized) {
     return (
       <View style={styles.loadingContainer}>
+        <View style={styles.logoContainer}>
+          <Text style={styles.logoText}>Spinr</Text>
+        </View>
         <ActivityIndicator size="large" color={SpinrConfig.theme.colors.primary} />
+        {initError && <Text style={styles.errorText}>{initError}</Text>}
       </View>
     );
   }
@@ -53,6 +74,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: SpinrConfig.theme.colors.primary,
+  },
+  logoContainer: {
+    marginBottom: 24,
+  },
+  logoText: {
+    fontSize: 48,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  errorText: {
+    color: '#FFFFFF',
+    marginTop: 16,
+    fontSize: 14,
   },
 });
