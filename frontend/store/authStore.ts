@@ -6,27 +6,42 @@ import { Platform } from 'react-native';
 
 const API_URL = Constants.expoConfig?.extra?.backendUrl || process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
+console.log('API_URL configured:', API_URL);
+
 // Platform-safe secure storage
 const storage = {
   async getItem(key: string): Promise<string | null> {
-    if (Platform.OS === 'web') {
-      return localStorage.getItem(key);
+    try {
+      if (Platform.OS === 'web') {
+        return localStorage.getItem(key);
+      }
+      return await SecureStore.getItemAsync(key);
+    } catch (e) {
+      console.log('Storage getItem error:', e);
+      return null;
     }
-    return SecureStore.getItemAsync(key);
   },
   async setItem(key: string, value: string): Promise<void> {
-    if (Platform.OS === 'web') {
-      localStorage.setItem(key, value);
-      return;
+    try {
+      if (Platform.OS === 'web') {
+        localStorage.setItem(key, value);
+        return;
+      }
+      return await SecureStore.setItemAsync(key, value);
+    } catch (e) {
+      console.log('Storage setItem error:', e);
     }
-    return SecureStore.setItemAsync(key, value);
   },
   async deleteItem(key: string): Promise<void> {
-    if (Platform.OS === 'web') {
-      localStorage.removeItem(key);
-      return;
+    try {
+      if (Platform.OS === 'web') {
+        localStorage.removeItem(key);
+        return;
+      }
+      return await SecureStore.deleteItemAsync(key);
+    } catch (e) {
+      console.log('Storage deleteItem error:', e);
     }
-    return SecureStore.deleteItemAsync(key);
   },
 };
 
