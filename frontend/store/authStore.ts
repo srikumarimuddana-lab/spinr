@@ -97,7 +97,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (error: any) {
       console.log('Auth initialization error:', error.message);
       // Token might be invalid, clear it
-      await SecureStore.deleteItemAsync('auth_token');
+      await storage.deleteItem('auth_token');
       set({ 
         user: null, 
         token: null, 
