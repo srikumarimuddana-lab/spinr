@@ -11,6 +11,7 @@ import {
   TouchableWithoutFeedback,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,33 +19,29 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/authStore';
 import SpinrConfig from '../config/spinr.config';
 
-// Format phone number as (XXX) XXX-XXXX
-const formatPhoneNumber = (text: string): string => {
-  const cleaned = text.replace(/\D/g, '');
-  const limited = cleaned.substring(0, 10);
-  
-  if (limited.length === 0) return '';
-  if (limited.length <= 3) return `(${limited}`;
-  if (limited.length <= 6) return `(${limited.slice(0, 3)}) ${limited.slice(3)}`;
-  return `(${limited.slice(0, 3)}) ${limited.slice(3, 6)}-${limited.slice(6)}`;
-};
-
 export default function LoginScreen() {
   const router = useRouter();
-  const { sendOTP, isLoading, error, clearError } = useAuthStore();
+  const { sendOTP, isLoading, clearError } = useAuthStore();
   
-  const [phoneDisplay, setPhoneDisplay] = useState('');
-  const [rawPhone, setRawPhone] = useState('');
+  const [phone, setPhone] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
+
+  const formatPhoneDisplay = (text: string): string => {
+    const cleaned = text.replace(/\D/g, '').substring(0, 10);
+    if (cleaned.length === 0) return '';
+    if (cleaned.length <= 3) return cleaned;
+    if (cleaned.length <= 6) return `${cleaned.slice(0, 3)} ${cleaned.slice(3)}`;
+    return `${cleaned.slice(0, 3)} ${cleaned.slice(3, 6)} ${cleaned.slice(6)}`;
+  };
 
   const handlePhoneChange = (text: string) => {
     const cleaned = text.replace(/\D/g, '').substring(0, 10);
-    setRawPhone(cleaned);
-    setPhoneDisplay(formatPhoneNumber(text));
+    setPhone(cleaned);
   };
 
-  const handleSendCode = async () => {
-    if (rawPhone.length !== 10) {
+  const handleContinue = async () => {
+    if (phone.length !== 10) {
       Alert.alert('Invalid Phone', 'Please enter a valid 10-digit phone number');
       return;
     }
@@ -53,10 +50,9 @@ export default function LoginScreen() {
     clearError();
 
     try {
-      const fullPhone = `+1${rawPhone}`;
+      const fullPhone = `+1${phone}`;
       const result = await sendOTP(fullPhone);
       
-      // Navigate to OTP screen with phone number
       router.push({
         pathname: '/otp',
         params: { 
@@ -69,7 +65,7 @@ export default function LoginScreen() {
     }
   };
 
-  const isValidPhone = rawPhone.length === 10;
+  const isValidPhone = phone.length === 10;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -79,67 +75,72 @@ export default function LoginScreen() {
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.content}>
+            {/* Back Button */}
+            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={24} color={SpinrConfig.theme.colors.primary} />
+            </TouchableOpacity>
+
             {/* Header */}
             <View style={styles.header}>
-              <Text style={styles.title}>Let's get moving.</Text>
+              <Text style={styles.title}>Enter your mobile{"\n"}number</Text>
               <Text style={styles.subtitle}>
-                Enter your phone number to continue
+                Spinr needs this to create your account and{"\n"}secure your rides.
               </Text>
             </View>
 
-            {/* Phone Input */}
-            <View style={styles.inputContainer}>
-              <View style={styles.countryCode}>
-                <Text style={styles.flag}>🇨🇦</Text>
-                <Text style={styles.countryText}>+1</Text>
-              </View>
-              <TextInput
-                ref={inputRef}
-                style={styles.phoneInput}
-                value={phoneDisplay}
-                onChangeText={handlePhoneChange}
-                placeholder="(306) 555-0199"
-                placeholderTextColor={SpinrConfig.theme.colors.textSecondary}
-                keyboardType="phone-pad"
-                maxLength={14}
-                autoFocus
-              />
-            </View>
+            {/* Phone Input Section */}
+            <View style={styles.inputSection}>
+              <Text style={styles.inputLabel}>Mobile Number</Text>
+              <View style={styles.phoneRow}>
+                {/* Country Code Selector */}
+                <View style={styles.countrySelector}>
+                  <Text style={styles.flag}>🇨🇦</Text>
+                  <Text style={styles.countryCode}>+1</Text>
+                  <Ionicons name="chevron-down" size={16} color="#666" />
+                </View>
 
-            {error && (
-              <Text style={styles.errorText}>{error}</Text>
-            )}
+                {/* Phone Input */}
+                <View style={[styles.phoneInputContainer, isFocused && styles.phoneInputFocused]}>
+                  <TextInput
+                    ref={inputRef}
+                    style={styles.phoneInput}
+                    value={formatPhoneDisplay(phone)}
+                    onChangeText={handlePhoneChange}
+                    placeholder="306 000 0000"
+                    placeholderTextColor="#999"
+                    keyboardType="phone-pad"
+                    maxLength={12}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
+                  />
+                </View>
+              </View>
+            </View>
 
             {/* Spacer */}
             <View style={styles.spacer} />
 
-            {/* Send Code Button */}
+            {/* Disclaimer */}
+            <Text style={styles.disclaimer}>
+              By continuing, you may receive an SMS for verification.{"\n"}Message and data rates may apply.
+            </Text>
+
+            {/* Continue Button */}
             <TouchableOpacity
               style={[
-                styles.button,
-                !isValidPhone && styles.buttonDisabled,
+                styles.continueButton,
+                !isValidPhone && styles.continueButtonDisabled,
               ]}
-              onPress={handleSendCode}
+              onPress={handleContinue}
               disabled={!isValidPhone || isLoading}
               activeOpacity={0.8}
             >
               {isLoading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <>
-                  <Text style={styles.buttonText}>Send Code</Text>
-                  <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
-                </>
+                <Text style={styles.continueButtonText}>Continue</Text>
               )}
             </TouchableOpacity>
-
-            {/* Terms */}
-            <Text style={styles.terms}>
-              By continuing, you agree to our{' '}
-              <Text style={styles.link}>Terms of Service</Text>
-              {' '}and{' '}
-              <Text style={styles.link}>Privacy Policy</Text>
-            </Text>
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
@@ -150,7 +151,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: SpinrConfig.theme.colors.background,
+    backgroundColor: '#FFFFFF',
   },
   keyboardView: {
     flex: 1,
@@ -158,91 +159,102 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 40,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    marginTop: 8,
   },
   header: {
+    marginTop: 24,
     marginBottom: 40,
   },
   title: {
     fontSize: 32,
     fontFamily: 'PlusJakartaSans_700Bold',
-    color: SpinrConfig.theme.colors.text,
-    marginBottom: 8,
+    color: '#1A1A1A',
+    lineHeight: 40,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'PlusJakartaSans_400Regular',
-    color: SpinrConfig.theme.colors.textSecondary,
+    color: '#666666',
+    marginTop: 12,
+    lineHeight: 22,
   },
-  inputContainer: {
+  inputSection: {
+    marginBottom: 24,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: '#1A1A1A',
+    marginBottom: 12,
+  },
+  phoneRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  countrySelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderRadius: SpinrConfig.theme.borderRadius,
-    borderWidth: 1,
-    borderColor: SpinrConfig.theme.colors.border,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 28,
     paddingHorizontal: 16,
-    height: 60,
-  },
-  countryCode: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingRight: 12,
-    borderRightWidth: 1,
-    borderRightColor: SpinrConfig.theme.colors.border,
-    marginRight: 12,
+    paddingVertical: 14,
+    gap: 8,
   },
   flag: {
-    fontSize: 24,
-    marginRight: 8,
+    fontSize: 20,
   },
-  countryText: {
-    fontSize: 18,
+  countryCode: {
+    fontSize: 16,
     fontFamily: 'PlusJakartaSans_600SemiBold',
-    color: SpinrConfig.theme.colors.text,
+    color: '#1A1A1A',
+  },
+  phoneInputContainer: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
+    borderRadius: 28,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+  },
+  phoneInputFocused: {
+    borderColor: SpinrConfig.theme.colors.primary,
   },
   phoneInput: {
-    flex: 1,
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: 'PlusJakartaSans_500Medium',
-    color: SpinrConfig.theme.colors.text,
-  },
-  errorText: {
-    color: SpinrConfig.theme.colors.error,
-    fontSize: 14,
-    fontFamily: 'PlusJakartaSans_400Regular',
-    marginTop: 8,
+    color: '#1A1A1A',
+    paddingVertical: 14,
   },
   spacer: {
     flex: 1,
   },
-  button: {
-    flexDirection: 'row',
+  disclaimer: {
+    fontSize: 13,
+    fontFamily: 'PlusJakartaSans_400Regular',
+    color: '#999999',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  continueButton: {
+    backgroundColor: SpinrConfig.theme.colors.primary,
+    borderRadius: 28,
+    paddingVertical: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: SpinrConfig.theme.colors.primary,
-    borderRadius: SpinrConfig.theme.borderRadius,
-    height: 56,
-    gap: 8,
+    marginBottom: 24,
   },
-  buttonDisabled: {
-    backgroundColor: '#D1D5DB',
+  continueButtonDisabled: {
+    backgroundColor: '#FFAAAA',
   },
-  buttonText: {
+  continueButtonText: {
     fontSize: 18,
     fontFamily: 'PlusJakartaSans_600SemiBold',
     color: '#FFFFFF',
-  },
-  terms: {
-    fontSize: 12,
-    fontFamily: 'PlusJakartaSans_400Regular',
-    color: SpinrConfig.theme.colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 24,
-    marginBottom: 16,
-    lineHeight: 18,
-  },
-  link: {
-    color: SpinrConfig.theme.colors.primary,
   },
 });

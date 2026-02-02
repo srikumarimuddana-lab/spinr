@@ -16,43 +16,30 @@ export default function RootLayout() {
   });
 
   const { initialize, isInitialized } = useAuthStore();
-  const [initError, setInitError] = useState<string | null>(null);
 
   useEffect(() => {
     const init = async () => {
       try {
-        console.log('Starting initialization...');
         await initialize();
-        console.log('Initialization complete');
       } catch (err: any) {
         console.log('Init error:', err);
-        setInitError(err.message || 'Failed to initialize');
       }
     };
     init();
   }, []);
 
-  // Handle font loading error
-  if (fontError) {
-    console.log('Font error:', fontError);
-  }
-
-  // Show loading while fonts load or auth initializes
   if (!fontsLoaded || !isInitialized) {
     return (
       <View style={styles.loadingContainer}>
-        <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>Spinr</Text>
-        </View>
-        <ActivityIndicator size="large" color={SpinrConfig.theme.colors.primary} />
-        {initError && <Text style={styles.errorText}>{initError}</Text>}
+        <Text style={styles.logoText}>Spinr</Text>
+        <ActivityIndicator size="large" color="#FFFFFF" style={{ marginTop: 20 }} />
       </View>
     );
   }
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -62,8 +49,8 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
         <Stack.Screen name="otp" />
-        <Stack.Screen name="profile" />
-        <Stack.Screen name="home" />
+        <Stack.Screen name="profile-setup" />
+        <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
       </Stack>
     </SafeAreaProvider>
   );
@@ -76,17 +63,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: SpinrConfig.theme.colors.primary,
   },
-  logoContainer: {
-    marginBottom: 24,
-  },
   logoText: {
-    fontSize: 48,
+    fontSize: 56,
     fontWeight: '700',
     color: '#FFFFFF',
-  },
-  errorText: {
-    color: '#FFFFFF',
-    marginTop: 16,
-    fontSize: 14,
   },
 });

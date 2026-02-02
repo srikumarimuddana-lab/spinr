@@ -10,7 +10,6 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/authStore';
 import SpinrConfig from '../config/spinr.config';
 
-const OTP_LENGTH = 6;
+const OTP_LENGTH = 4;
 
 export default function OTPScreen() {
   const router = useRouter();
@@ -32,7 +31,6 @@ export default function OTPScreen() {
   const phone = params.phone || '';
   const devOTP = params.dev_otp || '';
 
-  // Countdown timer for resend
   useEffect(() => {
     if (resendTimer > 0) {
       const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
@@ -40,7 +38,6 @@ export default function OTPScreen() {
     }
   }, [resendTimer]);
 
-  // Auto-submit when code is complete
   useEffect(() => {
     if (code.length === OTP_LENGTH) {
       handleVerify();
@@ -63,15 +60,12 @@ export default function OTPScreen() {
       const result = await verifyOTP(phone, code);
       
       if (result.is_new_user) {
-        // New user - go to profile creation
-        router.replace('/profile');
+        router.replace('/profile-setup');
       } else {
-        // Existing user - go to home
-        router.replace('/home');
+        router.replace('/(tabs)');
       }
     } catch (err: any) {
       setCode('');
-      // Error is already set in store
     }
   };
 
@@ -82,27 +76,26 @@ export default function OTPScreen() {
       await sendOTP(phone);
       setResendTimer(30);
       setCode('');
-      Alert.alert('Code Sent', 'A new verification code has been sent.');
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to resend code');
+      // Error handled in store
     }
   };
 
-  const handleBack = () => {
-    router.back();
-  };
-
-  // Format phone for display
   const formatPhone = (p: string) => {
     if (!p) return '';
     const cleaned = p.replace(/\D/g, '');
     if (cleaned.length === 11 && cleaned.startsWith('1')) {
-      return `+1 (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
+      return `+1 ${cleaned.slice(1, 4)} ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
     }
     return p;
   };
 
-  // Render OTP boxes
+  const formatTimer = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const renderOTPBoxes = () => {
     const boxes = [];
     for (let i = 0; i < OTP_LENGTH; i++) {
@@ -116,15 +109,10 @@ export default function OTPScreen() {
             styles.otpBox,
             isFilled && styles.otpBoxFilled,
             isActive && styles.otpBoxActive,
-            error && code.length === OTP_LENGTH && styles.otpBoxError,
+            error && code.length === 0 && styles.otpBoxError,
           ]}
         >
-          <Text style={[
-            styles.otpText,
-            error && code.length === OTP_LENGTH && styles.otpTextError,
-          ]}>
-            {code[i] || ''}
-          </Text>
+          <Text style={styles.otpText}>{code[i] || ''}</Text>
         </View>
       );
     }
@@ -140,23 +128,23 @@ export default function OTPScreen() {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.content}>
             {/* Back Button */}
-            <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-              <Ionicons name="arrow-back" size={24} color={SpinrConfig.theme.colors.text} />
+            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
             </TouchableOpacity>
 
             {/* Header */}
             <View style={styles.header}>
-              <Text style={styles.title}>Enter verification code</Text>
+              <Text style={styles.title}>Enter code</Text>
               <Text style={styles.subtitle}>
-                We sent a code to{' '}
+                We've sent an SMS with an activation code to{"\n"}your phone{' '}
                 <Text style={styles.phoneText}>{formatPhone(phone)}</Text>
               </Text>
             </View>
 
-            {/* DEV OTP Display (Remove in production) */}
+            {/* DEV OTP Display */}
             {devOTP && (
               <View style={styles.devOtpContainer}>
-                <Text style={styles.devOtpLabel}>🔧 Dev OTP:</Text>
+                <Text style={styles.devOtpLabel}>Dev OTP: </Text>
                 <Text style={styles.devOtpCode}>{devOTP}</Text>
               </View>
             )}
@@ -190,7 +178,7 @@ export default function OTPScreen() {
             <View style={styles.resendContainer}>
               {resendTimer > 0 ? (
                 <Text style={styles.resendText}>
-                  Resend code in <Text style={styles.timerText}>{resendTimer}s</Text>
+                  Resend code in <Text style={styles.timerText}>{formatTimer(resendTimer)}</Text>
                 </Text>
               ) : (
                 <TouchableOpacity onPress={handleResend}>
@@ -205,8 +193,8 @@ export default function OTPScreen() {
             {/* Verify Button */}
             <TouchableOpacity
               style={[
-                styles.button,
-                code.length !== OTP_LENGTH && styles.buttonDisabled,
+                styles.verifyButton,
+                code.length !== OTP_LENGTH && styles.verifyButtonDisabled,
               ]}
               onPress={handleVerify}
               disabled={code.length !== OTP_LENGTH || isLoading}
@@ -215,7 +203,10 @@ export default function OTPScreen() {
               {isLoading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.buttonText}>Verify</Text>
+                <View style={styles.verifyButtonContent}>
+                  <Text style={styles.verifyButtonText}>Verify</Text>
+                  <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+                </View>
               )}
             </TouchableOpacity>
           </View>
@@ -228,7 +219,7 @@ export default function OTPScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: SpinrConfig.theme.colors.background,
+    backgroundColor: '#FFFFFF',
   },
   keyboardView: {
     flex: 1,
@@ -244,30 +235,30 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   header: {
-    marginTop: 20,
+    marginTop: 24,
     marginBottom: 32,
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontFamily: 'PlusJakartaSans_700Bold',
-    color: SpinrConfig.theme.colors.text,
-    marginBottom: 8,
+    color: '#1A1A1A',
+    marginBottom: 12,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'PlusJakartaSans_400Regular',
-    color: SpinrConfig.theme.colors.textSecondary,
-    lineHeight: 24,
+    color: '#666666',
+    lineHeight: 22,
   },
   phoneText: {
     fontFamily: 'PlusJakartaSans_600SemiBold',
-    color: SpinrConfig.theme.colors.text,
+    color: '#1A1A1A',
   },
   devOtpContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    borderRadius: 8,
+    backgroundColor: '#FFF9E6',
+    borderRadius: 12,
     padding: 12,
     marginBottom: 24,
   },
@@ -275,7 +266,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'PlusJakartaSans_500Medium',
     color: '#92400E',
-    marginRight: 8,
   },
   devOtpCode: {
     fontSize: 18,
@@ -285,37 +275,34 @@ const styles = StyleSheet.create({
   },
   otpContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
+    justifyContent: 'center',
+    gap: 16,
+    marginBottom: 24,
   },
   otpBox: {
-    width: 48,
+    width: 64,
     height: 56,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: SpinrConfig.theme.colors.border,
-    backgroundColor: '#F9FAFB',
+    borderRadius: 28,
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
+    backgroundColor: '#F8F8F8',
     justifyContent: 'center',
     alignItems: 'center',
   },
   otpBoxFilled: {
     borderColor: SpinrConfig.theme.colors.primary,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: '#FFF',
   },
   otpBoxActive: {
     borderColor: SpinrConfig.theme.colors.primary,
   },
   otpBoxError: {
-    borderColor: SpinrConfig.theme.colors.error,
-    backgroundColor: '#FEF2F2',
+    borderColor: '#DC2626',
   },
   otpText: {
     fontSize: 24,
     fontFamily: 'PlusJakartaSans_700Bold',
-    color: SpinrConfig.theme.colors.text,
-  },
-  otpTextError: {
-    color: SpinrConfig.theme.colors.error,
+    color: '#1A1A1A',
   },
   hiddenInput: {
     position: 'absolute',
@@ -324,7 +311,7 @@ const styles = StyleSheet.create({
     width: 0,
   },
   errorText: {
-    color: SpinrConfig.theme.colors.error,
+    color: '#DC2626',
     fontSize: 14,
     fontFamily: 'PlusJakartaSans_500Medium',
     textAlign: 'center',
@@ -336,11 +323,11 @@ const styles = StyleSheet.create({
   resendText: {
     fontSize: 14,
     fontFamily: 'PlusJakartaSans_400Regular',
-    color: SpinrConfig.theme.colors.textSecondary,
+    color: '#666666',
   },
   timerText: {
     fontFamily: 'PlusJakartaSans_600SemiBold',
-    color: SpinrConfig.theme.colors.text,
+    color: '#1A1A1A',
   },
   resendLink: {
     fontSize: 14,
@@ -350,18 +337,23 @@ const styles = StyleSheet.create({
   spacer: {
     flex: 1,
   },
-  button: {
+  verifyButton: {
+    backgroundColor: SpinrConfig.theme.colors.primary,
+    borderRadius: 28,
+    paddingVertical: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: SpinrConfig.theme.colors.primary,
-    borderRadius: SpinrConfig.theme.borderRadius,
-    height: 56,
     marginBottom: 24,
   },
-  buttonDisabled: {
-    backgroundColor: '#D1D5DB',
+  verifyButtonDisabled: {
+    backgroundColor: '#FFAAAA',
   },
-  buttonText: {
+  verifyButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  verifyButtonText: {
     fontSize: 18,
     fontFamily: 'PlusJakartaSans_600SemiBold',
     color: '#FFFFFF',

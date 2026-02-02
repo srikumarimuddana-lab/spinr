@@ -11,7 +11,6 @@ export default function SplashScreen() {
   const scaleAnim = React.useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
-    // Start animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -30,19 +29,14 @@ export default function SplashScreen() {
   useEffect(() => {
     if (!isInitialized) return;
 
-    // Navigate after animation
     const timer = setTimeout(() => {
       if (!token) {
-        // Not logged in -> Login
         router.replace('/login');
       } else if (user && !user.profile_complete) {
-        // Logged in but profile incomplete -> Profile
-        router.replace('/profile');
+        router.replace('/profile-setup');
       } else if (user && user.profile_complete) {
-        // Fully logged in -> Home
-        router.replace('/home');
+        router.replace('/(tabs)');
       } else {
-        // Fallback
         router.replace('/login');
       }
     }, 1500);
@@ -62,7 +56,7 @@ export default function SplashScreen() {
         ]}
       >
         <Text style={styles.logo}>Spinr</Text>
-        <Text style={styles.tagline}>Let's get moving</Text>
+        <Text style={styles.tagline}>Ride local. Support local.</Text>
       </Animated.View>
     </View>
   );
@@ -79,10 +73,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    fontSize: 56,
+    fontSize: 64,
     fontFamily: 'PlusJakartaSans_700Bold',
     color: '#FFFFFF',
-    letterSpacing: -1,
+    letterSpacing: -2,
   },
   tagline: {
     fontSize: 16,
