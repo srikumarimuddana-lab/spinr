@@ -77,7 +77,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isLoading: true });
       
       // Get token from secure storage
-      const token = await SecureStore.getItemAsync('auth_token');
+      const token = await storage.getItem('auth_token');
       
       if (token) {
         // Set token in axios headers
