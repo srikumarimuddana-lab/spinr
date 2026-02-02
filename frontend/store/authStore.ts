@@ -89,24 +89,45 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: async () => {
     try {
+      console.log('Auth initializing...');
       set({ isLoading: true });
       
       // Get token from secure storage
       const token = await storage.getItem('auth_token');
+      console.log('Token from storage:', token ? 'exists' : 'none');
       
       if (token) {
         // Set token in axios headers
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         
-        // Fetch user profile
-        const response = await api.get('/auth/me');
-        set({ 
-          user: response.data, 
-          token,
-          isInitialized: true,
-          isLoading: false 
-        });
+        try {
+          // Fetch user profile with timeout
+          const response = await Promise.race([
+            api.get('/auth/me'),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Timeout')), 5000)
+            )
+          ]) as any;
+          
+          console.log('User fetched successfully');
+          set({ 
+            user: response.data, 
+            token,
+            isInitialized: true,
+            isLoading: false 
+          });
+        } catch (fetchError) {
+          console.log('Failed to fetch user, clearing token');
+          await storage.deleteItem('auth_token');
+          set({ 
+            user: null, 
+            token: null, 
+            isInitialized: true, 
+            isLoading: false 
+          });
+        }
       } else {
+        console.log('No token, setting initialized');
         set({ isInitialized: true, isLoading: false });
       }
     } catch (error: any) {
