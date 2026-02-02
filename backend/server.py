@@ -85,8 +85,8 @@ class AuthResponse(BaseModel):
 # ============ Helper Functions ============
 
 def generate_otp() -> str:
-    """Generate a 6-digit OTP code"""
-    return ''.join(random.choices(string.digits, k=6))
+    """Generate a 4-digit OTP code"""
+    return ''.join(random.choices(string.digits, k=4))
 
 def create_jwt_token(user_id: str, phone: str) -> str:
     """Create JWT token for user"""
