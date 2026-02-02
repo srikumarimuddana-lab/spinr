@@ -133,7 +133,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { token, user, is_new_user } = response.data;
       
       // Store token securely
-      await SecureStore.setItemAsync('auth_token', token);
+      await storage.setItem('auth_token', token);
       
       // Set token in axios headers
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
