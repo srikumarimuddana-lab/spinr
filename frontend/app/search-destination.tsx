@@ -11,9 +11,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useRideStore } from '../../store/rideStore';
-import { useAuthStore } from '../../store/authStore';
-import SpinrConfig from '../../config/spinr.config';
+import { useRideStore } from '../store/rideStore';
+import { useAuthStore } from '../store/authStore';
+import SpinrConfig from '../config/spinr.config';
 
 // Mock places for demo (in production, use Google Places API)
 const MOCK_PLACES = [
