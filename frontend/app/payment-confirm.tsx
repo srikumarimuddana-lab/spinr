@@ -30,7 +30,7 @@ export default function PaymentConfirmScreen() {
     try {
       const ride = await createRide(selectedPayment);
       router.replace({
-        pathname: '/ride-status',
+        pathname: '/driver-arriving',
         params: { rideId: ride.id },
       });
     } catch (error: any) {
