@@ -5,7 +5,10 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
+  Share,
+  Alert,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,6 +38,39 @@ export default function DriverArrivedScreen() {
 
   const handleCall = () => {
     // Initiate call
+  };
+
+  const handleShareTrip = async () => {
+    const driverInfo = `
+🚗 SPINR RIDE - DRIVER ARRIVED!
+
+👤 DRIVER: ${currentDriver?.name || 'John D.'}
+⭐ RATING: ${currentDriver?.rating || 4.9}/5
+🚙 TOTAL TRIPS: ${currentDriver?.total_rides || 1247}
+
+🚙 VEHICLE: ${currentDriver?.vehicle_color || 'Grey'} ${currentDriver?.vehicle_make || 'Honda'} ${currentDriver?.vehicle_model || 'Civic'}
+📋 LICENSE PLATE: ${currentDriver?.license_plate || 'SK-123-ABC'}
+
+📍 PICKUP: ${currentRide?.pickup_address || 'University of Saskatchewan'}
+🔑 PICKUP OTP: ${pickupOtp}
+
+I'm sharing this ride for safety. Screenshot this info!
+    `.trim();
+
+    try {
+      await Share.share({
+        message: driverInfo,
+        title: 'My Spinr Ride - Driver Arrived',
+      });
+    } catch (error) {
+      console.log('Share error:', error);
+    }
+  };
+
+  const handleCopyDetails = async () => {
+    const details = `Driver: ${currentDriver?.name || 'John D.'} | Vehicle: ${currentDriver?.vehicle_color || 'Grey'} ${currentDriver?.vehicle_make || 'Honda'} ${currentDriver?.vehicle_model || 'Civic'} | Plate: ${currentDriver?.license_plate || 'SK-123-ABC'} | OTP: ${pickupOtp}`;
+    await Clipboard.setStringAsync(details);
+    Alert.alert('Copied!', 'Driver details copied to clipboard');
   };
 
   const handleStartRide = () => {
