@@ -59,13 +59,46 @@ export default function RideInProgressScreen() {
   };
 
   const handleShareTrip = async () => {
+    const liveTrackingUrl = `spinr://track/${rideId || 'demo'}`;
+    const tripDetails = `
+🚗 TRACK MY SPINR RIDE - LIVE LOCATION
+
+👤 DRIVER: ${currentDriver?.name || 'John D.'}
+⭐ RATING: ${currentDriver?.rating || 4.9}/5
+
+🚙 VEHICLE: ${currentDriver?.vehicle_color || 'Grey'} ${currentDriver?.vehicle_make || 'Honda'} ${currentDriver?.vehicle_model || 'Civic'}
+📋 LICENSE PLATE: ${currentDriver?.license_plate || 'SK-123-ABC'}
+
+📍 CURRENT LOCATION: ${currentLocation}
+📍 HEADING TO: ${currentRide?.dropoff_address || '1055 Canada Place'}
+
+⏱️ ESTIMATED ARRIVAL: ${estimatedTime} (${eta} min left)
+
+🔴 LIVE TRACKING LINK:
+${liveTrackingUrl}
+
+I've shared my live location with you for safety.
+`.trim();
+
     try {
       await Share.share({
-        message: `I'm on my way! Track my Spinr ride to ${currentRide?.dropoff_address || 'destination'}. ETA: ${estimatedTime}`,
+        message: tripDetails,
+        title: 'Track My Spinr Ride',
       });
+      setIsSharingLocation(true);
+      Alert.alert(
+        'Trip Shared!', 
+        'Your live location is now being shared. They can track your journey in real-time.'
+      );
     } catch (error) {
       console.log(error);
     }
+  };
+
+  const handleCopyTrackingLink = async () => {
+    const trackingLink = `spinr://track/${rideId || 'demo'}`;
+    await Clipboard.setStringAsync(trackingLink);
+    Alert.alert('Copied!', 'Live tracking link copied to clipboard');
   };
 
   const handleCancelRide = () => {
