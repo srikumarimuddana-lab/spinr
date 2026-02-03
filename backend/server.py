@@ -955,10 +955,110 @@ async def simulate_driver_arrival(ride_id: str, current_user: dict = Depends(get
     
     await db.rides.update_one(
         {'id': ride_id},
-        {'$set': {'status': 'driver_arrived', 'updated_at': datetime.utcnow()}}
+        {'$set': {
+            'status': 'driver_arrived',
+            'driver_arrived_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }}
     )
     
     return {'success': True, 'pickup_otp': ride.get('pickup_otp', '')}
+
+@api_router.post("/rides/{ride_id}/start")
+async def start_ride(ride_id: str, current_user: dict = Depends(get_current_user)):
+    """Start the ride after OTP verification"""
+    ride = await db.rides.find_one({'id': ride_id, 'rider_id': current_user['id']})
+    if not ride:
+        raise HTTPException(status_code=404, detail='Ride not found')
+    
+    if ride['status'] != 'driver_arrived':
+        raise HTTPException(status_code=400, detail='Driver has not arrived yet')
+    
+    await db.rides.update_one(
+        {'id': ride_id},
+        {'$set': {
+            'status': 'in_progress',
+            'ride_started_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }}
+    )
+    
+    return {'success': True}
+
+@api_router.post("/rides/{ride_id}/complete")
+async def complete_ride(ride_id: str, current_user: dict = Depends(get_current_user)):
+    """Complete the ride (normally called by driver, but for demo rider can trigger)"""
+    ride = await db.rides.find_one({'id': ride_id, 'rider_id': current_user['id']})
+    if not ride:
+        raise HTTPException(status_code=404, detail='Ride not found')
+    
+    if ride['status'] != 'in_progress':
+        raise HTTPException(status_code=400, detail='Ride is not in progress')
+    
+    # Update ride as completed
+    await db.rides.update_one(
+        {'id': ride_id},
+        {'$set': {
+            'status': 'completed',
+            'ride_completed_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }}
+    )
+    
+    # Make driver available again
+    if ride.get('driver_id'):
+        await db.drivers.update_one(
+            {'id': ride['driver_id']},
+            {
+                '$set': {'is_available': True},
+                '$inc': {'total_rides': 1}
+            }
+        )
+    
+    updated_ride = await db.rides.find_one({'id': ride_id})
+    return serialize_doc(updated_ride)
+
+@api_router.post("/rides/{ride_id}/rate")
+async def rate_ride(ride_id: str, rating_data: RideRatingRequest, current_user: dict = Depends(get_current_user)):
+    """Rate the ride and optionally add tip"""
+    ride = await db.rides.find_one({'id': ride_id, 'rider_id': current_user['id']})
+    if not ride:
+        raise HTTPException(status_code=404, detail='Ride not found')
+    
+    if ride['status'] != 'completed':
+        raise HTTPException(status_code=400, detail='Can only rate completed rides')
+    
+    if rating_data.rating < 1 or rating_data.rating > 5:
+        raise HTTPException(status_code=400, detail='Rating must be between 1 and 5')
+    
+    # Update ride with rating and tip
+    update_data = {
+        'rider_rating': rating_data.rating,
+        'rider_comment': rating_data.comment,
+        'tip_amount': rating_data.tip_amount,
+        'updated_at': datetime.utcnow()
+    }
+    
+    # Add tip to driver earnings (100% of tip goes to driver)
+    if rating_data.tip_amount > 0:
+        update_data['driver_earnings'] = ride.get('driver_earnings', 0) + rating_data.tip_amount
+    
+    await db.rides.update_one({'id': ride_id}, {'$set': update_data})
+    
+    # Update driver's average rating
+    if ride.get('driver_id'):
+        driver = await db.drivers.find_one({'id': ride['driver_id']})
+        if driver:
+            # Calculate new average rating
+            current_rating = driver.get('rating', 5.0)
+            total_rides = driver.get('total_rides', 1)
+            new_rating = ((current_rating * (total_rides - 1)) + rating_data.rating) / total_rides
+            await db.drivers.update_one(
+                {'id': ride['driver_id']},
+                {'$set': {'rating': round(new_rating, 2)}}
+            )
+    
+    return {'success': True, 'tip_added': rating_data.tip_amount}
 
 # ============ Admin Routes ============
 
