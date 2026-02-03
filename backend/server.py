@@ -829,6 +829,8 @@ async def match_driver_to_ride(ride_id: str):
             {'$set': {
                 'driver_id': selected_driver['id'],
                 'status': 'driver_assigned',
+                'driver_notified_at': datetime.utcnow(),
+                'driver_accepted_at': datetime.utcnow(),  # Auto-accept for demo
                 'updated_at': datetime.utcnow()
             }}
         )
