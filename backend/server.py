@@ -381,7 +381,7 @@ async def delete_saved_address(address_id: str, current_user: dict = Depends(get
 @api_router.get("/vehicle-types")
 async def get_vehicle_types():
     types = await db.vehicle_types.find({'is_active': True}).to_list(100)
-    return types
+    return serialize_doc(types)
 
 @api_router.get("/fares")
 async def get_fares_for_location(lat: float = Query(...), lng: float = Query(...)):
@@ -398,14 +398,14 @@ async def get_fares_for_location(lat: float = Query(...), lng: float = Query(...
     if not matching_area:
         # Return default fares if no service area found
         vehicle_types = await db.vehicle_types.find({'is_active': True}).to_list(100)
-        return [{
+        return [serialize_doc({
             'vehicle_type': vt,
             'base_fare': 3.50,
             'per_km_rate': 1.50,
             'per_minute_rate': 0.25,
             'minimum_fare': 8.00,
             'booking_fee': 2.00
-        } for vt in vehicle_types]
+        }) for vt in vehicle_types]
     
     # Get fares for this service area
     fares = await db.fare_configs.find({
@@ -414,7 +414,7 @@ async def get_fares_for_location(lat: float = Query(...), lng: float = Query(...
     }).to_list(100)
     
     vehicle_types = await db.vehicle_types.find({'is_active': True}).to_list(100)
-    vt_map = {vt['id']: vt for vt in vehicle_types}
+    vt_map = {vt['id']: serialize_doc(vt) for vt in vehicle_types}
     
     result = []
     for fare in fares:
