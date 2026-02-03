@@ -153,6 +153,78 @@ backend:
         agent: "main"
         comment: "GET /api/auth/me working - returns user profile from JWT token"
 
+  - task: "Admin Settings API"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "GET/PUT /api/admin/settings working - can retrieve and update app settings including Google Maps API key, Stripe keys, driver matching algorithm, min rating, search radius"
+
+  - task: "Vehicle Types API"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "POST /api/admin/vehicle-types working - successfully created 3 vehicle types: Spinr Go (economy, 4 seats), Spinr XL (SUV, 6 seats), Spinr Lux (luxury, 4 seats)"
+
+  - task: "Service Areas API"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "POST /api/admin/service-areas working - successfully created Saskatoon service area with polygon geo-fencing coordinates"
+
+  - task: "Fare Configuration API"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "POST /api/admin/fare-configs working - successfully created fare configs for all 3 vehicle types in Saskatoon area with different pricing tiers"
+
+  - task: "Ride Estimation API"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "POST /api/rides/estimate working - successfully calculated ride estimates for Saskatoon coordinates (2.75km distance), returned 3 valid estimates with all required fields"
+
+  - task: "Public Settings API"
+    implemented: true
+    working: true
+    file: "server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "GET /api/settings working - returns public settings (Google Maps API key, Stripe publishable key) without exposing secret keys"
+
 frontend:
   - task: "Splash Screen"
     implemented: true
