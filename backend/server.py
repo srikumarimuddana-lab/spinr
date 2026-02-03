@@ -1587,26 +1587,47 @@ ADMIN_HTML = """
 
             <!-- Rides -->
             <div v-if="tab === 'rides'">
-                <h2 class="text-xl font-bold mb-6">Recent Rides</h2>
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold">Rides</h2>
+                    <button @click="downloadRides" class="bg-green-500 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Download CSV
+                    </button>
+                </div>
                 <div class="bg-white rounded-lg shadow overflow-hidden">
                     <table class="w-full">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pickup</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dropoff</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fare</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pickup</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dropoff</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fare</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Driver $</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Admin $</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tip</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
                             <tr v-for="ride in rides" :key="ride.id">
-                                <td class="px-6 py-4 text-sm">{{ ride.id.substring(0, 8) }}...</td>
-                                <td class="px-6 py-4 text-sm">{{ ride.pickup_address }}</td>
-                                <td class="px-6 py-4 text-sm">{{ ride.dropoff_address }}</td>
-                                <td class="px-6 py-4">${{ ride.total_fare }}</td>
-                                <td class="px-6 py-4">
+                                <td class="px-4 py-4 text-sm font-mono">{{ ride.id.substring(0, 8) }}...</td>
+                                <td class="px-4 py-4 text-sm">{{ (ride.pickup_address || '').substring(0, 25) }}...</td>
+                                <td class="px-4 py-4 text-sm">{{ (ride.dropoff_address || '').substring(0, 25) }}...</td>
+                                <td class="px-4 py-4 font-medium">${{ ride.total_fare || 0 }}</td>
+                                <td class="px-4 py-4 text-green-600">${{ ride.driver_earnings || 0 }}</td>
+                                <td class="px-4 py-4 text-red-600">${{ ride.admin_earnings || 0 }}</td>
+                                <td class="px-4 py-4 text-yellow-600">${{ ride.tip_amount || 0 }}</td>
+                                <td class="px-4 py-4">
                                     <span :class="getStatusClass(ride.status)" class="px-2 py-1 rounded text-xs">{{ ride.status }}</span>
+                                </td>
+                                <td class="px-4 py-4">
+                                    <span v-if="ride.rider_rating" class="flex items-center gap-1">{{ ride.rider_rating }} ⭐</span>
+                                    <span v-else class="text-gray-400">-</span>
+                                </td>
+                                <td class="px-4 py-4">
+                                    <button @click="viewRideDetails(ride)" class="text-blue-500 text-sm">View Timeline</button>
                                 </td>
                             </tr>
                         </tbody>
