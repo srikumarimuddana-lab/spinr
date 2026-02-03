@@ -25,9 +25,8 @@ export default function RideCompletedScreen() {
   };
 
   const handleProceedToRating = () => {
-    clearRide();
-    // In a real app, navigate to rating screen
-    router.replace('/(tabs)');
+    // Navigate to rating screen
+    router.replace({ pathname: '/rate-ride', params: { rideId } });
   };
 
   const fare = currentRide?.total_fare || 14.50;
