@@ -222,14 +222,39 @@ class Ride(BaseModel):
     distance_km: float
     duration_minutes: int
     base_fare: float
+    distance_fare: float = 0.0
+    time_fare: float = 0.0
+    booking_fee: float = 2.0
     total_fare: float
+    tip_amount: float = 0.0
     payment_method: str = "card"
     payment_intent_id: Optional[str] = None
     payment_status: str = "pending"
     status: str = "searching"
     pickup_otp: str = ""
+    # Timeline tracking
+    ride_requested_at: datetime = Field(default_factory=datetime.utcnow)
+    driver_notified_at: Optional[datetime] = None
+    driver_accepted_at: Optional[datetime] = None
+    driver_arrived_at: Optional[datetime] = None
+    ride_started_at: Optional[datetime] = None
+    ride_completed_at: Optional[datetime] = None
+    cancelled_at: Optional[datetime] = None
+    # Earnings split
+    driver_earnings: float = 0.0  # Distance fare goes to driver
+    admin_earnings: float = 0.0   # Booking fee goes to admin
+    cancellation_fee_driver: float = 0.0
+    cancellation_fee_admin: float = 0.0
+    # Rating
+    rider_rating: Optional[int] = None
+    rider_comment: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class RideRatingRequest(BaseModel):
+    rating: int
+    comment: Optional[str] = None
+    tip_amount: float = 0.0
 
 # ============ Helper Functions ============
 
