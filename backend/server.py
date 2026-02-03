@@ -146,6 +146,9 @@ class AppSettings(BaseModel):
     driver_matching_algorithm: str = "nearest"
     min_driver_rating: float = 4.0
     search_radius_km: float = 10.0
+    cancellation_fee_admin: float = 0.50  # Admin gets 50 cents
+    cancellation_fee_driver: float = 2.50  # Default driver gets $2.50 (rest of $3 total)
+    platform_fee_percent: float = 0.0  # 0% commission - driver keeps all fare
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 class ServiceArea(BaseModel):
