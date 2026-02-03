@@ -1387,14 +1387,15 @@ ADMIN_HTML = """
         <!-- Navigation -->
         <nav class="bg-white border-b">
             <div class="max-w-7xl mx-auto px-4">
-                <div class="flex gap-8">
-                    <button @click="tab = 'dashboard'" :class="{'tab-active': tab === 'dashboard'}" class="py-4 px-2 text-sm font-medium">Dashboard</button>
-                    <button @click="tab = 'settings'" :class="{'tab-active': tab === 'settings'}" class="py-4 px-2 text-sm font-medium">Settings</button>
-                    <button @click="tab = 'areas'" :class="{'tab-active': tab === 'areas'}" class="py-4 px-2 text-sm font-medium">Service Areas</button>
-                    <button @click="tab = 'vehicles'" :class="{'tab-active': tab === 'vehicles'}" class="py-4 px-2 text-sm font-medium">Vehicle Types</button>
-                    <button @click="tab = 'fares'" :class="{'tab-active': tab === 'fares'}" class="py-4 px-2 text-sm font-medium">Fare Config</button>
-                    <button @click="tab = 'rides'" :class="{'tab-active': tab === 'rides'}" class="py-4 px-2 text-sm font-medium">Rides</button>
-                    <button @click="tab = 'drivers'" :class="{'tab-active': tab === 'drivers'}" class="py-4 px-2 text-sm font-medium">Drivers</button>
+                <div class="flex gap-8 overflow-x-auto">
+                    <button @click="tab = 'dashboard'" :class="{'tab-active': tab === 'dashboard'}" class="py-4 px-2 text-sm font-medium whitespace-nowrap">Dashboard</button>
+                    <button @click="tab = 'settings'" :class="{'tab-active': tab === 'settings'}" class="py-4 px-2 text-sm font-medium whitespace-nowrap">Settings</button>
+                    <button @click="tab = 'areas'" :class="{'tab-active': tab === 'areas'}" class="py-4 px-2 text-sm font-medium whitespace-nowrap">Service Areas</button>
+                    <button @click="tab = 'vehicles'" :class="{'tab-active': tab === 'vehicles'}" class="py-4 px-2 text-sm font-medium whitespace-nowrap">Vehicle Types</button>
+                    <button @click="tab = 'fares'" :class="{'tab-active': tab === 'fares'}" class="py-4 px-2 text-sm font-medium whitespace-nowrap">Fare Config</button>
+                    <button @click="tab = 'rides'" :class="{'tab-active': tab === 'rides'}" class="py-4 px-2 text-sm font-medium whitespace-nowrap">Rides</button>
+                    <button @click="tab = 'drivers'" :class="{'tab-active': tab === 'drivers'}" class="py-4 px-2 text-sm font-medium whitespace-nowrap">Drivers</button>
+                    <button @click="tab = 'earnings'" :class="{'tab-active': tab === 'earnings'}" class="py-4 px-2 text-sm font-medium whitespace-nowrap">Earnings</button>
                 </div>
             </div>
         </nav>
