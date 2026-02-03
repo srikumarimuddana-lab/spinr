@@ -1,0 +1,420 @@
+import React, { useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Dimensions,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useRideStore } from '../store/rideStore';
+import SpinrConfig from '../config/spinr.config';
+
+const { width } = Dimensions.get('window');
+
+export default function DriverArrivedScreen() {
+  const router = useRouter();
+  const { rideId } = useLocalSearchParams<{ rideId: string }>();
+  const { currentRide, currentDriver, fetchRide } = useRideStore();
+
+  useEffect(() => {
+    if (rideId) {
+      fetchRide(rideId);
+    }
+  }, [rideId]);
+
+  const handleBack = () => {
+    router.back();
+  };
+
+  const handleMessage = () => {
+    router.push({ pathname: '/chat-driver', params: { rideId } });
+  };
+
+  const handleCall = () => {
+    // Initiate call
+  };
+
+  const handleStartRide = () => {
+    // In a real app, driver would verify OTP and start the ride
+    // For demo, we'll navigate to in-progress
+    router.replace({ pathname: '/ride-in-progress', params: { rideId } });
+  };
+
+  const pickupOtp = currentRide?.pickup_otp || '1234';
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+            <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
+          </TouchableOpacity>
+          
+          <View style={styles.arrivedPill}>
+            <View style={styles.greenDot} />
+            <Text style={styles.arrivedText}>Driver has arrived</Text>
+          </View>
+          
+          <TouchableOpacity style={styles.emergencyButton}>
+            <Ionicons name="shield" size={20} color={SpinrConfig.theme.colors.primary} />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+
+      {/* Map Area */}
+      <View style={styles.mapContainer}>
+        <View style={styles.mapPlaceholder}>
+          {/* Pickup marker */}
+          <View style={styles.pickupMarker}>
+            <View style={styles.pickupMarkerInner}>
+              <Ionicons name="location" size={20} color="#FFF" />
+            </View>
+          </View>
+          
+          {/* Car at pickup */}
+          <View style={styles.carAtPickup}>
+            <Ionicons name="car" size={16} color="#FFF" />
+          </View>
+        </View>
+      </View>
+
+      {/* Bottom Sheet */}
+      <View style={styles.bottomSheet}>
+        <View style={styles.sheetHandle} />
+        
+        {/* OTP Section */}
+        <View style={styles.otpSection}>
+          <Text style={styles.otpLabel}>Share this PIN with your driver</Text>
+          <View style={styles.otpContainer}>
+            {pickupOtp.split('').map((digit, index) => (
+              <View key={index} style={styles.otpDigit}>
+                <Text style={styles.otpDigitText}>{digit}</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.otpHint}>Driver will enter this to start the trip</Text>
+        </View>
+        
+        {/* Driver Info */}
+        <View style={styles.driverSection}>
+          <View style={styles.driverAvatar}>
+            <Ionicons name="person" size={28} color="#666" />
+            <View style={styles.ratingBadge}>
+              <Ionicons name="star" size={10} color="#FFB800" />
+              <Text style={styles.ratingText}>{currentDriver?.rating || 4.9}</Text>
+            </View>
+          </View>
+          
+          <View style={styles.driverInfo}>
+            <Text style={styles.driverName}>{currentDriver?.name || 'John D.'}</Text>
+            <View style={styles.arrivedIndicator}>
+              <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+              <Text style={styles.arrivedIndicatorText}>Arrived at pickup</Text>
+            </View>
+          </View>
+          
+          <TouchableOpacity style={styles.callButton} onPress={handleCall}>
+            <Ionicons name="call" size={22} color={SpinrConfig.theme.colors.primary} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Vehicle Info */}
+        <View style={styles.vehicleCard}>
+          <View>
+            <Text style={styles.vehicleName}>
+              {currentDriver?.vehicle_color || 'Grey'} {currentDriver?.vehicle_make || 'Honda'} {currentDriver?.vehicle_model || 'Civic'}
+            </Text>
+            <Text style={styles.plateText}>{currentDriver?.license_plate || 'SK-123-ABC'}</Text>
+          </View>
+          <Ionicons name="car" size={32} color={SpinrConfig.theme.colors.primary} />
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity style={styles.messageButton} onPress={handleMessage}>
+            <Ionicons name="chatbubble" size={20} color="#FFF" />
+            <Text style={styles.messageButtonText}>Message Driver</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Demo Button */}
+        <TouchableOpacity style={styles.demoButton} onPress={handleStartRide}>
+          <Text style={styles.demoButtonText}>Start Ride (Demo)</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#E8E8E8',
+  },
+  headerSafeArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  arrivedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  greenDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+    marginRight: 8,
+  },
+  arrivedText: {
+    fontSize: 15,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: '#1A1A1A',
+  },
+  emergencyButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  mapContainer: {
+    flex: 1,
+  },
+  mapPlaceholder: {
+    flex: 1,
+    backgroundColor: '#D4E4D4',
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickupMarker: {
+    alignItems: 'center',
+  },
+  pickupMarkerInner: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: SpinrConfig.theme.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#FFF',
+  },
+  carAtPickup: {
+    position: 'absolute',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1A1A1A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    top: '45%',
+    left: '55%',
+  },
+  bottomSheet: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 30,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  otpSection: {
+    backgroundColor: SpinrConfig.theme.colors.primary,
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  otpLabel: {
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans_500Medium',
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 12,
+  },
+  otpContainer: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  otpDigit: {
+    width: 50,
+    height: 56,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  otpDigitText: {
+    fontSize: 26,
+    fontFamily: 'PlusJakartaSans_700Bold',
+    color: '#FFF',
+  },
+  otpHint: {
+    fontSize: 12,
+    fontFamily: 'PlusJakartaSans_400Regular',
+    color: 'rgba(255,255,255,0.7)',
+  },
+  driverSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  driverAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#E8E8E8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    position: 'relative',
+  },
+  ratingBadge: {
+    position: 'absolute',
+    bottom: -4,
+    left: -4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  ratingText: {
+    fontSize: 11,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: '#1A1A1A',
+    marginLeft: 2,
+  },
+  driverInfo: {
+    flex: 1,
+  },
+  driverName: {
+    fontSize: 18,
+    fontFamily: 'PlusJakartaSans_700Bold',
+    color: '#1A1A1A',
+  },
+  arrivedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  arrivedIndicatorText: {
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans_500Medium',
+    color: '#10B981',
+    marginLeft: 4,
+  },
+  callButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFF0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  vehicleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F9F9F9',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  vehicleName: {
+    fontSize: 15,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: '#1A1A1A',
+  },
+  plateText: {
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans_500Medium',
+    color: '#666',
+    marginTop: 2,
+  },
+  actionButtons: {
+    marginBottom: 12,
+  },
+  messageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: SpinrConfig.theme.colors.primary,
+    paddingVertical: 16,
+    borderRadius: 28,
+    gap: 8,
+  },
+  messageButtonText: {
+    fontSize: 16,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: '#FFF',
+  },
+  demoButton: {
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+  },
+  demoButtonText: {
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: '#FFF',
+  },
+});
