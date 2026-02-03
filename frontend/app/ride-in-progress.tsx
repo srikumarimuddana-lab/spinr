@@ -219,11 +219,33 @@ I've shared my live location with you for safety.
           </View>
         </View>
 
+        {/* Live Sharing Banner - if active */}
+        {isSharingLocation && (
+          <View style={styles.liveSharingBanner}>
+            <View style={styles.liveIndicator}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>LIVE</Text>
+            </View>
+            <Text style={styles.sharingText}>Location sharing active</Text>
+            <TouchableOpacity onPress={handleCopyTrackingLink}>
+              <Ionicons name="copy-outline" size={18} color="#666" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.shareButton} onPress={handleShareTrip}>
-            <Ionicons name="share-social-outline" size={20} color="#1A1A1A" />
-            <Text style={styles.shareButtonText}>Share Trip</Text>
+          <TouchableOpacity 
+            style={[styles.shareButton, isSharingLocation && styles.shareButtonActive]} 
+            onPress={handleShareTrip}
+          >
+            <View style={styles.shareButtonIcon}>
+              <Ionicons name="location" size={18} color={isSharingLocation ? "#FFF" : "#1A1A1A"} />
+              {isSharingLocation && <View style={styles.sharePulse} />}
+            </View>
+            <Text style={[styles.shareButtonText, isSharingLocation && styles.shareButtonTextActive]}>
+              {isSharingLocation ? 'Sharing Live' : 'Share Trip'}
+            </Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.cancelButton} onPress={handleCancelRide}>
