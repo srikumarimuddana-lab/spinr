@@ -1496,6 +1496,10 @@ ADMIN_HTML = """
 async def admin_panel():
     return ADMIN_HTML
 
+@api_router.get("/admin-panel", response_class=HTMLResponse)
+async def admin_panel_page():
+    return ADMIN_HTML
+
 # ============ Seed Default Data ============
 
 @api_router.post("/seed-defaults")
