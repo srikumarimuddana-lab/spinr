@@ -1162,19 +1162,198 @@ async def admin_get_rides():
 async def admin_get_stats():
     total_rides = await db.rides.count_documents({})
     completed_rides = await db.rides.count_documents({'status': 'completed'})
+    cancelled_rides = await db.rides.count_documents({'status': 'cancelled'})
     active_rides = await db.rides.count_documents({'status': {'$in': ['searching', 'driver_assigned', 'driver_arrived', 'in_progress']}})
     total_drivers = await db.drivers.count_documents({})
     online_drivers = await db.drivers.count_documents({'is_online': True})
     total_users = await db.users.count_documents({})
     
+    # Calculate earnings
+    rides_cursor = db.rides.find({'status': 'completed'})
+    total_driver_earnings = 0
+    total_admin_earnings = 0
+    total_tips = 0
+    
+    async for ride in rides_cursor:
+        total_driver_earnings += ride.get('driver_earnings', 0) + ride.get('tip_amount', 0)
+        total_admin_earnings += ride.get('admin_earnings', 0)
+        total_tips += ride.get('tip_amount', 0)
+    
+    # Add cancellation earnings
+    cancelled_cursor = db.rides.find({'status': 'cancelled', 'cancellation_fee_admin': {'$gt': 0}})
+    async for ride in cancelled_cursor:
+        total_admin_earnings += ride.get('cancellation_fee_admin', 0)
+        total_driver_earnings += ride.get('cancellation_fee_driver', 0)
+    
     return {
         'total_rides': total_rides,
         'completed_rides': completed_rides,
+        'cancelled_rides': cancelled_rides,
         'active_rides': active_rides,
         'total_drivers': total_drivers,
         'online_drivers': online_drivers,
-        'total_users': total_users
+        'total_users': total_users,
+        'total_driver_earnings': round(total_driver_earnings, 2),
+        'total_admin_earnings': round(total_admin_earnings, 2),
+        'total_tips': round(total_tips, 2)
     }
+
+@admin_router.get("/rides/{ride_id}/details")
+async def admin_get_ride_details(ride_id: str):
+    """Get detailed ride information including timeline"""
+    ride = await db.rides.find_one({'id': ride_id})
+    if not ride:
+        raise HTTPException(status_code=404, detail='Ride not found')
+    
+    driver = None
+    if ride.get('driver_id'):
+        driver = await db.drivers.find_one({'id': ride['driver_id']})
+    
+    rider = await db.users.find_one({'id': ride['rider_id']})
+    vehicle_type = await db.vehicle_types.find_one({'id': ride['vehicle_type_id']})
+    
+    return {
+        'ride': serialize_doc(ride),
+        'driver': serialize_doc(driver),
+        'rider': serialize_doc(rider),
+        'vehicle_type': serialize_doc(vehicle_type)
+    }
+
+@admin_router.get("/drivers/{driver_id}/rides")
+async def admin_get_driver_rides(driver_id: str):
+    """Get all rides for a specific driver"""
+    driver = await db.drivers.find_one({'id': driver_id})
+    if not driver:
+        raise HTTPException(status_code=404, detail='Driver not found')
+    
+    rides = await db.rides.find({'driver_id': driver_id}).sort('created_at', -1).to_list(100)
+    
+    # Calculate driver stats
+    total_earnings = 0
+    total_tips = 0
+    completed_count = 0
+    cancelled_count = 0
+    
+    for ride in rides:
+        if ride['status'] == 'completed':
+            total_earnings += ride.get('driver_earnings', 0) + ride.get('tip_amount', 0)
+            total_tips += ride.get('tip_amount', 0)
+            completed_count += 1
+        elif ride['status'] == 'cancelled':
+            total_earnings += ride.get('cancellation_fee_driver', 0)
+            cancelled_count += 1
+    
+    return {
+        'driver': serialize_doc(driver),
+        'rides': serialize_doc(rides),
+        'stats': {
+            'total_earnings': round(total_earnings, 2),
+            'total_tips': round(total_tips, 2),
+            'completed_rides': completed_count,
+            'cancelled_rides': cancelled_count
+        }
+    }
+
+@admin_router.get("/earnings")
+async def admin_get_earnings():
+    """Get detailed earnings breakdown"""
+    rides = await db.rides.find().sort('created_at', -1).to_list(1000)
+    
+    earnings_data = []
+    for ride in rides:
+        earnings_data.append({
+            'ride_id': ride['id'],
+            'date': ride.get('ride_completed_at') or ride.get('cancelled_at') or ride.get('created_at'),
+            'status': ride['status'],
+            'total_fare': ride.get('total_fare', 0),
+            'driver_earnings': ride.get('driver_earnings', 0),
+            'admin_earnings': ride.get('admin_earnings', 0),
+            'tip_amount': ride.get('tip_amount', 0),
+            'cancellation_fee_admin': ride.get('cancellation_fee_admin', 0),
+            'cancellation_fee_driver': ride.get('cancellation_fee_driver', 0),
+            'pickup_address': ride.get('pickup_address', ''),
+            'dropoff_address': ride.get('dropoff_address', ''),
+            'distance_km': ride.get('distance_km', 0),
+            'driver_id': ride.get('driver_id', ''),
+            'rider_id': ride.get('rider_id', '')
+        })
+    
+    return earnings_data
+
+@admin_router.get("/export/rides")
+async def admin_export_rides():
+    """Export all rides as CSV-ready JSON"""
+    rides = await db.rides.find().sort('created_at', -1).to_list(10000)
+    
+    export_data = []
+    for ride in rides:
+        driver = None
+        if ride.get('driver_id'):
+            driver = await db.drivers.find_one({'id': ride['driver_id']})
+        
+        export_data.append({
+            'ride_id': ride['id'],
+            'status': ride['status'],
+            'pickup_address': ride.get('pickup_address', ''),
+            'dropoff_address': ride.get('dropoff_address', ''),
+            'distance_km': ride.get('distance_km', 0),
+            'duration_minutes': ride.get('duration_minutes', 0),
+            'total_fare': ride.get('total_fare', 0),
+            'driver_earnings': ride.get('driver_earnings', 0),
+            'admin_earnings': ride.get('admin_earnings', 0),
+            'tip_amount': ride.get('tip_amount', 0),
+            'driver_name': driver['name'] if driver else '',
+            'driver_rating': driver['rating'] if driver else '',
+            'driver_license_plate': driver['license_plate'] if driver else '',
+            'ride_requested_at': str(ride.get('ride_requested_at', '')),
+            'driver_notified_at': str(ride.get('driver_notified_at', '')),
+            'driver_accepted_at': str(ride.get('driver_accepted_at', '')),
+            'driver_arrived_at': str(ride.get('driver_arrived_at', '')),
+            'ride_started_at': str(ride.get('ride_started_at', '')),
+            'ride_completed_at': str(ride.get('ride_completed_at', '')),
+            'cancelled_at': str(ride.get('cancelled_at', '')),
+            'rider_rating': ride.get('rider_rating', ''),
+            'rider_comment': ride.get('rider_comment', '')
+        })
+    
+    return export_data
+
+@admin_router.get("/export/drivers")
+async def admin_export_drivers():
+    """Export all drivers with their ride stats"""
+    drivers = await db.drivers.find().to_list(1000)
+    
+    export_data = []
+    for driver in drivers:
+        # Get ride stats for each driver
+        rides = await db.rides.find({'driver_id': driver['id']}).to_list(10000)
+        
+        completed_rides = [r for r in rides if r['status'] == 'completed']
+        cancelled_rides = [r for r in rides if r['status'] == 'cancelled']
+        
+        total_earnings = sum(r.get('driver_earnings', 0) + r.get('tip_amount', 0) for r in completed_rides)
+        total_earnings += sum(r.get('cancellation_fee_driver', 0) for r in cancelled_rides)
+        total_tips = sum(r.get('tip_amount', 0) for r in completed_rides)
+        
+        export_data.append({
+            'driver_id': driver['id'],
+            'name': driver['name'],
+            'phone': driver['phone'],
+            'vehicle_make': driver['vehicle_make'],
+            'vehicle_model': driver['vehicle_model'],
+            'vehicle_color': driver['vehicle_color'],
+            'license_plate': driver['license_plate'],
+            'rating': driver.get('rating', 5.0),
+            'total_rides': driver.get('total_rides', 0),
+            'completed_rides': len(completed_rides),
+            'cancelled_rides': len(cancelled_rides),
+            'total_earnings': round(total_earnings, 2),
+            'total_tips': round(total_tips, 2),
+            'is_online': driver.get('is_online', False),
+            'is_available': driver.get('is_available', True)
+        })
+    
+    return export_data
 
 # ============ Admin Panel HTML ============
 
