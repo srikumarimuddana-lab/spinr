@@ -912,18 +912,40 @@ async def cancel_ride(ride_id: str, current_user: dict = Depends(get_current_use
     if ride['status'] in ['completed', 'cancelled']:
         raise HTTPException(status_code=400, detail='Cannot cancel this ride')
     
+    # Cannot cancel after ride has started
+    if ride['status'] == 'in_progress':
+        raise HTTPException(status_code=400, detail='Cannot cancel ride after it has started')
+    
+    # Get cancellation fee settings
+    settings = await db.settings.find_one({'id': 'app_settings'})
+    cancellation_fee_admin = settings.get('cancellation_fee_admin', 0.50) if settings else 0.50
+    cancellation_fee_driver = settings.get('cancellation_fee_driver', 2.50) if settings else 2.50
+    
+    update_data = {
+        'status': 'cancelled',
+        'cancelled_at': datetime.utcnow(),
+        'updated_at': datetime.utcnow()
+    }
+    
+    # If driver has arrived at pickup, apply cancellation fee
+    if ride['status'] == 'driver_arrived':
+        update_data['cancellation_fee_admin'] = cancellation_fee_admin
+        update_data['cancellation_fee_driver'] = cancellation_fee_driver
+    
     if ride.get('driver_id'):
         await db.drivers.update_one(
             {'id': ride['driver_id']},
             {'$set': {'is_available': True}}
         )
     
-    await db.rides.update_one(
-        {'id': ride_id},
-        {'$set': {'status': 'cancelled', 'updated_at': datetime.utcnow()}}
-    )
+    await db.rides.update_one({'id': ride_id}, {'$set': update_data})
     
-    return {'success': True}
+    return {
+        'success': True,
+        'cancellation_fee_applied': ride['status'] == 'driver_arrived',
+        'cancellation_fee_admin': cancellation_fee_admin if ride['status'] == 'driver_arrived' else 0,
+        'cancellation_fee_driver': cancellation_fee_driver if ride['status'] == 'driver_arrived' else 0
+    }
 
 @api_router.post("/rides/{ride_id}/simulate-arrival")
 async def simulate_driver_arrival(ride_id: str, current_user: dict = Depends(get_current_user)):
