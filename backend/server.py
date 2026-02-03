@@ -1954,6 +1954,83 @@ ADMIN_HTML = """
                         'cancelled': 'bg-red-100 text-red-700'
                     };
                     return classes[status] || 'bg-gray-100';
+                },
+                async downloadRides() {
+                    const res = await fetch('/api/admin/export/rides');
+                    const data = await res.json();
+                    this.downloadCSV(data, 'spinr_rides_export.csv');
+                },
+                async downloadDrivers() {
+                    const res = await fetch('/api/admin/export/drivers');
+                    const data = await res.json();
+                    this.downloadCSV(data, 'spinr_drivers_export.csv');
+                },
+                async downloadEarnings() {
+                    const res = await fetch('/api/admin/earnings');
+                    const data = await res.json();
+                    this.downloadCSV(data, 'spinr_earnings_export.csv');
+                },
+                downloadCSV(data, filename) {
+                    if (!data.length) {
+                        alert('No data to export');
+                        return;
+                    }
+                    const headers = Object.keys(data[0]);
+                    const csvContent = [
+                        headers.join(','),
+                        ...data.map(row => headers.map(h => '"' + (row[h] || '').toString().replace(/"/g, '""') + '"').join(','))
+                    ].join('\\n');
+                    const blob = new Blob([csvContent], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                },
+                viewRideDetails(ride) {
+                    const timeline = [
+                        { event: 'Ride Requested', time: ride.ride_requested_at },
+                        { event: 'Driver Notified', time: ride.driver_notified_at },
+                        { event: 'Driver Accepted', time: ride.driver_accepted_at },
+                        { event: 'Driver Arrived', time: ride.driver_arrived_at },
+                        { event: 'Ride Started', time: ride.ride_started_at },
+                        { event: 'Ride Completed', time: ride.ride_completed_at },
+                        { event: 'Cancelled', time: ride.cancelled_at }
+                    ].filter(t => t.time);
+                    
+                    let msg = 'RIDE TIMELINE\\n\\n';
+                    msg += 'Pickup: ' + ride.pickup_address + '\\n';
+                    msg += 'Dropoff: ' + ride.dropoff_address + '\\n';
+                    msg += 'Distance: ' + ride.distance_km + ' km\\n';
+                    msg += 'Duration: ' + ride.duration_minutes + ' min\\n';
+                    msg += 'Total Fare: $' + ride.total_fare + '\\n';
+                    msg += 'Driver Earnings: $' + (ride.driver_earnings || 0) + '\\n';
+                    msg += 'Tip: $' + (ride.tip_amount || 0) + '\\n';
+                    msg += 'Rating: ' + (ride.rider_rating || 'Not rated') + '\\n';
+                    msg += '\\nTIMELINE:\\n';
+                    timeline.forEach(t => {
+                        msg += '• ' + t.event + ': ' + new Date(t.time).toLocaleString() + '\\n';
+                    });
+                    alert(msg);
+                },
+                async viewDriverRides(driver) {
+                    try {
+                        const res = await fetch('/api/admin/drivers/' + driver.id + '/rides');
+                        const data = await res.json();
+                        let msg = 'DRIVER: ' + driver.name + '\\n\\n';
+                        msg += 'Rating: ' + driver.rating + ' ⭐\\n';
+                        msg += 'Total Rides: ' + data.stats.completed_rides + '\\n';
+                        msg += 'Total Earnings: $' + data.stats.total_earnings + '\\n';
+                        msg += 'Total Tips: $' + data.stats.total_tips + '\\n';
+                        msg += '\\nRECENT RIDES:\\n';
+                        data.rides.slice(0, 5).forEach(r => {
+                            msg += '• ' + r.status + ' - $' + r.total_fare + ' (' + new Date(r.created_at).toLocaleDateString() + ')\\n';
+                        });
+                        alert(msg);
+                    } catch (e) {
+                        alert('Error fetching driver rides');
+                    }
                 }
             }
         }).mount('#app');
