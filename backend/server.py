@@ -1481,6 +1481,19 @@ ADMIN_HTML = """
                                 <input v-model="settings.search_radius_km" type="number" step="1" min="1" class="w-full px-4 py-2 border rounded-lg">
                             </div>
                         </div>
+                        <hr>
+                        <h3 class="text-md font-semibold text-gray-800">Cancellation Fees</h3>
+                        <p class="text-sm text-gray-500">Applied when rider cancels after driver has arrived at pickup</p>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Admin Fee ($)</label>
+                                <input v-model="settings.cancellation_fee_admin" type="number" step="0.01" min="0" class="w-full px-4 py-2 border rounded-lg" placeholder="0.50">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Driver Fee ($)</label>
+                                <input v-model="settings.cancellation_fee_driver" type="number" step="0.01" min="0" class="w-full px-4 py-2 border rounded-lg" placeholder="2.50">
+                            </div>
+                        </div>
                         <button @click="saveSettings" class="bg-red-500 text-white px-6 py-2 rounded-lg font-medium hover:bg-red-600">Save Settings</button>
                     </div>
                 </div>
