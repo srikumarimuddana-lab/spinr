@@ -220,6 +220,51 @@ export const useRideStore = create<RideState>((set, get) => ({
     }
   },
 
+  startRide: async () => {
+    const { currentRide } = get();
+    if (!currentRide) return;
+
+    try {
+      const api = getApi();
+      await api.post(`/rides/${currentRide.id}/start`);
+      set({
+        currentRide: { ...currentRide, status: 'in_progress' },
+      });
+    } catch (error: any) {
+      set({ error: error.message });
+    }
+  },
+
+  completeRide: async () => {
+    const { currentRide } = get();
+    if (!currentRide) return;
+
+    try {
+      const api = getApi();
+      const response = await api.post(`/rides/${currentRide.id}/complete`);
+      set({
+        currentRide: response.data,
+      });
+      return response.data;
+    } catch (error: any) {
+      set({ error: error.message });
+    }
+  },
+
+  rateRide: async (rideId: string, rating: number, comment?: string, tipAmount?: number) => {
+    try {
+      const api = getApi();
+      await api.post(`/rides/${rideId}/rate`, {
+        rating,
+        comment,
+        tip_amount: tipAmount || 0,
+      });
+    } catch (error: any) {
+      set({ error: error.message });
+      throw error;
+    }
+  },
+
   fetchSavedAddresses: async () => {
     try {
       const api = getApi();
