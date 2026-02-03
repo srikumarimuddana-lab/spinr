@@ -1,7 +1,7 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Query, WebSocket, WebSocketDisconnect
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -17,6 +17,8 @@ import string
 from datetime import datetime, timedelta
 import jwt
 import math
+import json
+import asyncio
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -47,6 +49,42 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# WebSocket connection manager for real-time tracking
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+        self.driver_locations: Dict[str, Dict] = {}
+    
+    async def connect(self, websocket: WebSocket, client_id: str):
+        await websocket.accept()
+        self.active_connections[client_id] = websocket
+        logger.info(f"WebSocket connected: {client_id}")
+    
+    def disconnect(self, client_id: str):
+        if client_id in self.active_connections:
+            del self.active_connections[client_id]
+        logger.info(f"WebSocket disconnected: {client_id}")
+    
+    async def send_personal_message(self, message: dict, client_id: str):
+        if client_id in self.active_connections:
+            await self.active_connections[client_id].send_json(message)
+    
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections.values():
+            await connection.send_json(message)
+    
+    def update_driver_location(self, driver_id: str, lat: float, lng: float):
+        self.driver_locations[driver_id] = {
+            'lat': lat,
+            'lng': lng,
+            'updated_at': datetime.utcnow().isoformat()
+        }
+    
+    def get_driver_location(self, driver_id: str):
+        return self.driver_locations.get(driver_id)
+
+manager = ConnectionManager()
 
 # Helper to convert MongoDB documents
 def serialize_doc(doc):
@@ -100,13 +138,12 @@ class AuthResponse(BaseModel):
     user: UserProfile
     is_new_user: bool
 
-# Admin Models
 class AppSettings(BaseModel):
     id: str = "app_settings"
     google_maps_api_key: str = ""
     stripe_publishable_key: str = ""
     stripe_secret_key: str = ""
-    driver_matching_algorithm: str = "nearest"  # nearest, round_robin, rating_based, combined
+    driver_matching_algorithm: str = "nearest"
     min_driver_rating: float = 4.0
     search_radius_km: float = 10.0
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -115,15 +152,15 @@ class ServiceArea(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     city: str
-    polygon: List[Dict[str, float]]  # List of {lat, lng} points
+    polygon: List[Dict[str, float]]
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class VehicleType(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str  # Spinr Go, Spinr XL, Comfort
+    name: str
     description: str
-    icon: str  # icon name
+    icon: str
     capacity: int
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -143,7 +180,7 @@ class FareConfig(BaseModel):
 class SavedAddress(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str
-    name: str  # Home, Work, etc.
+    name: str
     address: str
     lat: float
     lng: float
@@ -184,7 +221,9 @@ class Ride(BaseModel):
     base_fare: float
     total_fare: float
     payment_method: str = "card"
-    status: str = "searching"  # searching, driver_assigned, driver_arrived, in_progress, completed, cancelled
+    payment_intent_id: Optional[str] = None
+    payment_status: str = "pending"
+    status: str = "searching"
     pickup_otp: str = ""
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -222,7 +261,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     return user
 
 def calculate_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """Calculate distance in km using Haversine formula"""
     R = 6371
     dlat = math.radians(lat2 - lat1)
     dlng = math.radians(lng2 - lng1)
@@ -231,7 +269,6 @@ def calculate_distance(lat1: float, lng1: float, lat2: float, lng2: float) -> fl
     return R * c
 
 def point_in_polygon(lat: float, lng: float, polygon: List[Dict[str, float]]) -> bool:
-    """Check if a point is inside a polygon using ray casting"""
     n = len(polygon)
     inside = False
     j = n - 1
@@ -242,6 +279,87 @@ def point_in_polygon(lat: float, lng: float, polygon: List[Dict[str, float]]) ->
             inside = not inside
         j = i
     return inside
+
+# ============ WebSocket Routes ============
+
+@app.websocket("/ws/{client_type}/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_type: str, client_id: str):
+    await manager.connect(websocket, f"{client_type}_{client_id}")
+    try:
+        while True:
+            data = await websocket.receive_json()
+            
+            if data.get('type') == 'driver_location':
+                # Update driver location
+                driver_id = data.get('driver_id')
+                lat = data.get('lat')
+                lng = data.get('lng')
+                if driver_id and lat and lng:
+                    manager.update_driver_location(driver_id, lat, lng)
+                    # Update in database
+                    await db.drivers.update_one(
+                        {'id': driver_id},
+                        {'$set': {'lat': lat, 'lng': lng}}
+                    )
+                    # Notify rider if there's an active ride
+                    rides = await db.rides.find({
+                        'driver_id': driver_id,
+                        'status': {'$in': ['driver_assigned', 'driver_arrived', 'in_progress']}
+                    }).to_list(10)
+                    for ride in rides:
+                        await manager.send_personal_message(
+                            {
+                                'type': 'driver_location_update',
+                                'driver_id': driver_id,
+                                'lat': lat,
+                                'lng': lng
+                            },
+                            f"rider_{ride['rider_id']}"
+                        )
+            
+            elif data.get('type') == 'ride_status_update':
+                ride_id = data.get('ride_id')
+                status = data.get('status')
+                if ride_id and status:
+                    ride = await db.rides.find_one({'id': ride_id})
+                    if ride:
+                        await manager.send_personal_message(
+                            {
+                                'type': 'ride_status_changed',
+                                'ride_id': ride_id,
+                                'status': status
+                            },
+                            f"rider_{ride['rider_id']}"
+                        )
+            
+            elif data.get('type') == 'get_nearby_drivers':
+                lat = data.get('lat')
+                lng = data.get('lng')
+                radius = data.get('radius', 5)  # km
+                if lat and lng:
+                    drivers = await db.drivers.find({
+                        'is_online': True,
+                        'is_available': True
+                    }).to_list(100)
+                    
+                    nearby = []
+                    for driver in drivers:
+                        dist = calculate_distance(lat, lng, driver['lat'], driver['lng'])
+                        if dist <= radius:
+                            nearby.append({
+                                'id': driver['id'],
+                                'lat': driver['lat'],
+                                'lng': driver['lng'],
+                                'vehicle_type_id': driver['vehicle_type_id']
+                            })
+                    
+                    await websocket.send_json({
+                        'type': 'nearby_drivers',
+                        'drivers': nearby
+                    })
+                    
+    except WebSocketDisconnect:
+        manager.disconnect(f"{client_type}_{client_id}")
 
 # ============ Auth Routes ============
 
@@ -333,7 +451,6 @@ async def create_profile(request: CreateProfileRequest, current_user: dict = Dep
 
 @api_router.get("/settings")
 async def get_public_settings():
-    """Get public settings (API keys for frontend)"""
     settings = await db.settings.find_one({'id': 'app_settings'})
     if not settings:
         return {'google_maps_api_key': '', 'stripe_publishable_key': ''}
@@ -354,7 +471,7 @@ class SavedAddressCreate(BaseModel):
 @api_router.get("/addresses")
 async def get_saved_addresses(current_user: dict = Depends(get_current_user)):
     addresses = await db.saved_addresses.find({'user_id': current_user['id']}).to_list(100)
-    return addresses
+    return serialize_doc(addresses)
 
 @api_router.post("/addresses")
 async def create_saved_address(request: SavedAddressCreate, current_user: dict = Depends(get_current_user)):
@@ -385,8 +502,6 @@ async def get_vehicle_types():
 
 @api_router.get("/fares")
 async def get_fares_for_location(lat: float = Query(...), lng: float = Query(...)):
-    """Get fare configs for a given location"""
-    # Find service area containing this point
     service_areas = await db.service_areas.find({'is_active': True}).to_list(100)
     
     matching_area = None
@@ -396,7 +511,6 @@ async def get_fares_for_location(lat: float = Query(...), lng: float = Query(...
             break
     
     if not matching_area:
-        # Return default fares if no service area found
         vehicle_types = await db.vehicle_types.find({'is_active': True}).to_list(100)
         return [serialize_doc({
             'vehicle_type': vt,
@@ -407,7 +521,6 @@ async def get_fares_for_location(lat: float = Query(...), lng: float = Query(...
             'booking_fee': 2.00
         }) for vt in vehicle_types]
     
-    # Get fares for this service area
     fares = await db.fare_configs.find({
         'service_area_id': matching_area['id'],
         'is_active': True
@@ -431,6 +544,84 @@ async def get_fares_for_location(lat: float = Query(...), lng: float = Query(...
     
     return result
 
+# ============ Stripe Payment Routes ============
+
+@api_router.post("/payments/create-intent")
+async def create_payment_intent(request: Dict[str, Any], current_user: dict = Depends(get_current_user)):
+    """Create a Stripe payment intent"""
+    settings = await db.settings.find_one({'id': 'app_settings'})
+    stripe_secret = settings.get('stripe_secret_key', '') if settings else ''
+    
+    if not stripe_secret:
+        # Return mock response if Stripe not configured
+        return {
+            'client_secret': 'mock_secret_' + str(uuid.uuid4()),
+            'payment_intent_id': 'pi_mock_' + str(uuid.uuid4()),
+            'mock': True
+        }
+    
+    try:
+        import stripe
+        stripe.api_key = stripe_secret
+        
+        amount = int(request.get('amount', 0) * 100)  # Convert to cents
+        
+        intent = stripe.PaymentIntent.create(
+            amount=amount,
+            currency='cad',
+            automatic_payment_methods={'enabled': True},
+            metadata={
+                'user_id': current_user['id'],
+                'ride_id': request.get('ride_id', '')
+            }
+        )
+        
+        return {
+            'client_secret': intent.client_secret,
+            'payment_intent_id': intent.id,
+            'mock': False
+        }
+    except Exception as e:
+        logger.error(f"Stripe error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/payments/confirm")
+async def confirm_payment(request: Dict[str, Any], current_user: dict = Depends(get_current_user)):
+    """Confirm payment was successful"""
+    payment_intent_id = request.get('payment_intent_id')
+    ride_id = request.get('ride_id')
+    
+    if payment_intent_id and payment_intent_id.startswith('pi_mock_'):
+        # Mock payment
+        if ride_id:
+            await db.rides.update_one(
+                {'id': ride_id},
+                {'$set': {'payment_status': 'paid', 'payment_intent_id': payment_intent_id}}
+            )
+        return {'status': 'succeeded', 'mock': True}
+    
+    settings = await db.settings.find_one({'id': 'app_settings'})
+    stripe_secret = settings.get('stripe_secret_key', '') if settings else ''
+    
+    if stripe_secret:
+        try:
+            import stripe
+            stripe.api_key = stripe_secret
+            intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+            
+            if ride_id:
+                await db.rides.update_one(
+                    {'id': ride_id},
+                    {'$set': {'payment_status': intent.status, 'payment_intent_id': payment_intent_id}}
+                )
+            
+            return {'status': intent.status, 'mock': False}
+        except Exception as e:
+            logger.error(f"Stripe error: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+    
+    return {'status': 'unknown', 'mock': True}
+
 # ============ Ride Routes ============
 
 class RideEstimateRequest(BaseModel):
@@ -451,16 +642,13 @@ class CreateRideRequest(BaseModel):
 
 @api_router.post("/rides/estimate")
 async def estimate_ride(request: RideEstimateRequest):
-    """Get ride estimates for all vehicle types"""
     distance_km = calculate_distance(
         request.pickup_lat, request.pickup_lng,
         request.dropoff_lat, request.dropoff_lng
     )
     
-    # Estimate duration (average speed 30 km/h in city)
-    duration_minutes = int(distance_km / 30 * 60) + 5  # +5 for pickup time
+    duration_minutes = int(distance_km / 30 * 60) + 5
     
-    # Get fares for pickup location
     fares = await get_fares_for_location(request.pickup_lat, request.pickup_lng)
     
     estimates = []
@@ -487,14 +675,12 @@ async def estimate_ride(request: RideEstimateRequest):
 
 @api_router.post("/rides")
 async def create_ride(request: CreateRideRequest, current_user: dict = Depends(get_current_user)):
-    """Create a new ride request"""
     distance_km = calculate_distance(
         request.pickup_lat, request.pickup_lng,
         request.dropoff_lat, request.dropoff_lng
     )
     duration_minutes = int(distance_km / 30 * 60) + 5
     
-    # Get fare for this vehicle type
     fares = await get_fares_for_location(request.pickup_lat, request.pickup_lng)
     fare_info = next((f for f in fares if f['vehicle_type']['id'] == request.vehicle_type_id), fares[0] if fares else None)
     
@@ -527,15 +713,13 @@ async def create_ride(request: CreateRideRequest, current_user: dict = Depends(g
     
     await db.rides.insert_one(ride.dict())
     
-    # Simulate driver matching (in real app, this would be async)
+    # Match driver
     await match_driver_to_ride(ride.id)
     
-    # Get updated ride
     updated_ride = await db.rides.find_one({'id': ride.id})
-    return updated_ride
+    return serialize_doc(updated_ride)
 
 async def match_driver_to_ride(ride_id: str):
-    """Match a driver to a ride based on configured algorithm"""
     ride = await db.rides.find_one({'id': ride_id})
     if not ride:
         return
@@ -545,7 +729,6 @@ async def match_driver_to_ride(ride_id: str):
     min_rating = settings.get('min_driver_rating', 4.0) if settings else 4.0
     search_radius = settings.get('search_radius_km', 10.0) if settings else 10.0
     
-    # Get available drivers
     drivers = await db.drivers.find({
         'is_online': True,
         'is_available': True,
@@ -553,7 +736,6 @@ async def match_driver_to_ride(ride_id: str):
     }).to_list(100)
     
     if not drivers:
-        # Create simulated drivers for demo
         await create_demo_drivers(ride['vehicle_type_id'], ride['pickup_lat'], ride['pickup_lng'])
         drivers = await db.drivers.find({
             'is_online': True,
@@ -564,11 +746,9 @@ async def match_driver_to_ride(ride_id: str):
     if not drivers:
         return
     
-    # Filter by rating if using combined or rating_based
     if algorithm in ['rating_based', 'combined']:
         drivers = [d for d in drivers if d.get('rating', 5.0) >= min_rating]
     
-    # Filter by distance
     drivers_with_distance = []
     for driver in drivers:
         dist = calculate_distance(
@@ -581,7 +761,6 @@ async def match_driver_to_ride(ride_id: str):
     if not drivers_with_distance:
         return
     
-    # Select driver based on algorithm
     selected_driver = None
     
     if algorithm == 'nearest' or algorithm == 'combined':
@@ -591,7 +770,6 @@ async def match_driver_to_ride(ride_id: str):
         drivers_with_distance.sort(key=lambda x: x[0].get('rating', 5.0), reverse=True)
         selected_driver = drivers_with_distance[0][0]
     elif algorithm == 'round_robin':
-        # Get last assigned driver and pick next
         last_ride = await db.rides.find_one(
             {'driver_id': {'$ne': None}},
             sort=[('created_at', -1)]
@@ -607,7 +785,6 @@ async def match_driver_to_ride(ride_id: str):
             selected_driver = drivers_with_distance[0][0]
     
     if selected_driver:
-        # Update ride with driver
         await db.rides.update_one(
             {'id': ride_id},
             {'$set': {
@@ -616,14 +793,22 @@ async def match_driver_to_ride(ride_id: str):
                 'updated_at': datetime.utcnow()
             }}
         )
-        # Mark driver as unavailable
         await db.drivers.update_one(
             {'id': selected_driver['id']},
             {'$set': {'is_available': False}}
         )
+        
+        # Notify rider via WebSocket
+        await manager.send_personal_message(
+            {
+                'type': 'driver_assigned',
+                'ride_id': ride_id,
+                'driver_id': selected_driver['id']
+            },
+            f"rider_{ride['rider_id']}"
+        )
 
 async def create_demo_drivers(vehicle_type_id: str, lat: float, lng: float):
-    """Create demo drivers near a location"""
     demo_drivers = [
         {'name': 'Mike Johnson', 'vehicle_make': 'Toyota', 'vehicle_model': 'Camry', 'vehicle_color': 'Silver', 'license_plate': 'SKT 4521'},
         {'name': 'Sarah Williams', 'vehicle_make': 'Honda', 'vehicle_model': 'Civic', 'vehicle_color': 'Blue', 'license_plate': 'REG 8832'},
@@ -660,24 +845,22 @@ async def get_ride(ride_id: str, current_user: dict = Depends(get_current_user))
     if not ride:
         raise HTTPException(status_code=404, detail='Ride not found')
     
-    # Get driver info if assigned
     driver = None
     if ride.get('driver_id'):
         driver = await db.drivers.find_one({'id': ride['driver_id']})
     
-    # Get vehicle type
     vehicle_type = await db.vehicle_types.find_one({'id': ride['vehicle_type_id']})
     
     return {
-        'ride': ride,
-        'driver': driver,
-        'vehicle_type': vehicle_type
+        'ride': serialize_doc(ride),
+        'driver': serialize_doc(driver),
+        'vehicle_type': serialize_doc(vehicle_type)
     }
 
 @api_router.get("/rides")
 async def get_user_rides(current_user: dict = Depends(get_current_user)):
     rides = await db.rides.find({'rider_id': current_user['id']}).sort('created_at', -1).to_list(100)
-    return rides
+    return serialize_doc(rides)
 
 @api_router.post("/rides/{ride_id}/cancel")
 async def cancel_ride(ride_id: str, current_user: dict = Depends(get_current_user)):
@@ -688,7 +871,6 @@ async def cancel_ride(ride_id: str, current_user: dict = Depends(get_current_use
     if ride['status'] in ['completed', 'cancelled']:
         raise HTTPException(status_code=400, detail='Cannot cancel this ride')
     
-    # Release driver
     if ride.get('driver_id'):
         await db.drivers.update_one(
             {'id': ride['driver_id']},
@@ -704,7 +886,6 @@ async def cancel_ride(ride_id: str, current_user: dict = Depends(get_current_use
 
 @api_router.post("/rides/{ride_id}/simulate-arrival")
 async def simulate_driver_arrival(ride_id: str, current_user: dict = Depends(get_current_user)):
-    """Simulate driver arriving at pickup (for demo)"""
     ride = await db.rides.find_one({'id': ride_id, 'rider_id': current_user['id']})
     if not ride:
         raise HTTPException(status_code=404, detail='Ride not found')
@@ -725,7 +906,7 @@ async def admin_get_settings():
         default_settings = AppSettings()
         await db.settings.insert_one(default_settings.dict())
         return default_settings.dict()
-    return settings
+    return serialize_doc(settings)
 
 @admin_router.put("/settings")
 async def admin_update_settings(settings: Dict[str, Any]):
@@ -736,13 +917,12 @@ async def admin_update_settings(settings: Dict[str, Any]):
         {'$set': settings},
         upsert=True
     )
-    return await db.settings.find_one({'id': 'app_settings'})
+    return serialize_doc(await db.settings.find_one({'id': 'app_settings'}))
 
-# Service Areas
 @admin_router.get("/service-areas")
 async def admin_get_service_areas():
     areas = await db.service_areas.find().to_list(100)
-    return areas
+    return serialize_doc(areas)
 
 @admin_router.post("/service-areas")
 async def admin_create_service_area(area: Dict[str, Any]):
@@ -754,18 +934,17 @@ async def admin_create_service_area(area: Dict[str, Any]):
 async def admin_update_service_area(area_id: str, area: Dict[str, Any]):
     area['id'] = area_id
     await db.service_areas.update_one({'id': area_id}, {'$set': area})
-    return await db.service_areas.find_one({'id': area_id})
+    return serialize_doc(await db.service_areas.find_one({'id': area_id}))
 
 @admin_router.delete("/service-areas/{area_id}")
 async def admin_delete_service_area(area_id: str):
     await db.service_areas.delete_one({'id': area_id})
     return {'success': True}
 
-# Vehicle Types
 @admin_router.get("/vehicle-types")
 async def admin_get_vehicle_types():
     types = await db.vehicle_types.find().to_list(100)
-    return types
+    return serialize_doc(types)
 
 @admin_router.post("/vehicle-types")
 async def admin_create_vehicle_type(vtype: Dict[str, Any]):
@@ -777,18 +956,17 @@ async def admin_create_vehicle_type(vtype: Dict[str, Any]):
 async def admin_update_vehicle_type(type_id: str, vtype: Dict[str, Any]):
     vtype['id'] = type_id
     await db.vehicle_types.update_one({'id': type_id}, {'$set': vtype})
-    return await db.vehicle_types.find_one({'id': type_id})
+    return serialize_doc(await db.vehicle_types.find_one({'id': type_id}))
 
 @admin_router.delete("/vehicle-types/{type_id}")
 async def admin_delete_vehicle_type(type_id: str):
     await db.vehicle_types.delete_one({'id': type_id})
     return {'success': True}
 
-# Fare Configs
 @admin_router.get("/fare-configs")
 async def admin_get_fare_configs():
     configs = await db.fare_configs.find().to_list(100)
-    return configs
+    return serialize_doc(configs)
 
 @admin_router.post("/fare-configs")
 async def admin_create_fare_config(config: Dict[str, Any]):
@@ -800,36 +978,532 @@ async def admin_create_fare_config(config: Dict[str, Any]):
 async def admin_update_fare_config(config_id: str, config: Dict[str, Any]):
     config['id'] = config_id
     await db.fare_configs.update_one({'id': config_id}, {'$set': config})
-    return await db.fare_configs.find_one({'id': config_id})
+    return serialize_doc(await db.fare_configs.find_one({'id': config_id}))
 
 @admin_router.delete("/fare-configs/{config_id}")
 async def admin_delete_fare_config(config_id: str):
     await db.fare_configs.delete_one({'id': config_id})
     return {'success': True}
 
-# Drivers
 @admin_router.get("/drivers")
 async def admin_get_drivers():
     drivers = await db.drivers.find().to_list(100)
-    return drivers
+    return serialize_doc(drivers)
 
-# Rides
 @admin_router.get("/rides")
 async def admin_get_rides():
     rides = await db.rides.find().sort('created_at', -1).to_list(100)
-    return rides
+    return serialize_doc(rides)
+
+@admin_router.get("/stats")
+async def admin_get_stats():
+    total_rides = await db.rides.count_documents({})
+    completed_rides = await db.rides.count_documents({'status': 'completed'})
+    active_rides = await db.rides.count_documents({'status': {'$in': ['searching', 'driver_assigned', 'driver_arrived', 'in_progress']}})
+    total_drivers = await db.drivers.count_documents({})
+    online_drivers = await db.drivers.count_documents({'is_online': True})
+    total_users = await db.users.count_documents({})
+    
+    return {
+        'total_rides': total_rides,
+        'completed_rides': completed_rides,
+        'active_rides': active_rides,
+        'total_drivers': total_drivers,
+        'online_drivers': online_drivers,
+        'total_users': total_users
+    }
+
+# ============ Admin Panel HTML ============
+
+ADMIN_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spinr Admin Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .tab-active { border-bottom: 2px solid #ee2b2b; color: #ee2b2b; }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="app">
+        <!-- Header -->
+        <header class="bg-white shadow">
+            <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+                <h1 class="text-2xl font-bold text-red-500">Spinr Admin</h1>
+                <div class="flex items-center gap-4">
+                    <span class="text-sm text-gray-500">{{ stats.online_drivers || 0 }} drivers online</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="bg-white border-b">
+            <div class="max-w-7xl mx-auto px-4">
+                <div class="flex gap-8">
+                    <button @click="tab = 'dashboard'" :class="{'tab-active': tab === 'dashboard'}" class="py-4 px-2 text-sm font-medium">Dashboard</button>
+                    <button @click="tab = 'settings'" :class="{'tab-active': tab === 'settings'}" class="py-4 px-2 text-sm font-medium">Settings</button>
+                    <button @click="tab = 'areas'" :class="{'tab-active': tab === 'areas'}" class="py-4 px-2 text-sm font-medium">Service Areas</button>
+                    <button @click="tab = 'vehicles'" :class="{'tab-active': tab === 'vehicles'}" class="py-4 px-2 text-sm font-medium">Vehicle Types</button>
+                    <button @click="tab = 'fares'" :class="{'tab-active': tab === 'fares'}" class="py-4 px-2 text-sm font-medium">Fare Config</button>
+                    <button @click="tab = 'rides'" :class="{'tab-active': tab === 'rides'}" class="py-4 px-2 text-sm font-medium">Rides</button>
+                    <button @click="tab = 'drivers'" :class="{'tab-active': tab === 'drivers'}" class="py-4 px-2 text-sm font-medium">Drivers</button>
+                </div>
+            </div>
+        </nav>
+
+        <main class="max-w-7xl mx-auto px-4 py-8">
+            <!-- Dashboard -->
+            <div v-if="tab === 'dashboard'">
+                <h2 class="text-xl font-bold mb-6">Dashboard</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-white rounded-lg p-6 shadow">
+                        <p class="text-gray-500 text-sm">Total Rides</p>
+                        <p class="text-3xl font-bold">{{ stats.total_rides || 0 }}</p>
+                    </div>
+                    <div class="bg-white rounded-lg p-6 shadow">
+                        <p class="text-gray-500 text-sm">Active Rides</p>
+                        <p class="text-3xl font-bold text-green-500">{{ stats.active_rides || 0 }}</p>
+                    </div>
+                    <div class="bg-white rounded-lg p-6 shadow">
+                        <p class="text-gray-500 text-sm">Total Users</p>
+                        <p class="text-3xl font-bold">{{ stats.total_users || 0 }}</p>
+                    </div>
+                    <div class="bg-white rounded-lg p-6 shadow">
+                        <p class="text-gray-500 text-sm">Total Drivers</p>
+                        <p class="text-3xl font-bold">{{ stats.total_drivers || 0 }}</p>
+                    </div>
+                    <div class="bg-white rounded-lg p-6 shadow">
+                        <p class="text-gray-500 text-sm">Online Drivers</p>
+                        <p class="text-3xl font-bold text-green-500">{{ stats.online_drivers || 0 }}</p>
+                    </div>
+                    <div class="bg-white rounded-lg p-6 shadow">
+                        <p class="text-gray-500 text-sm">Completed Rides</p>
+                        <p class="text-3xl font-bold">{{ stats.completed_rides || 0 }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings -->
+            <div v-if="tab === 'settings'">
+                <h2 class="text-xl font-bold mb-6">App Settings</h2>
+                <div class="bg-white rounded-lg p-6 shadow max-w-2xl">
+                    <div class="space-y-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Google Maps API Key</label>
+                            <input v-model="settings.google_maps_api_key" type="text" class="w-full px-4 py-2 border rounded-lg" placeholder="AIza...">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Stripe Publishable Key</label>
+                            <input v-model="settings.stripe_publishable_key" type="text" class="w-full px-4 py-2 border rounded-lg" placeholder="pk_...">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Stripe Secret Key</label>
+                            <input v-model="settings.stripe_secret_key" type="password" class="w-full px-4 py-2 border rounded-lg" placeholder="sk_...">
+                        </div>
+                        <hr>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Driver Matching Algorithm</label>
+                            <select v-model="settings.driver_matching_algorithm" class="w-full px-4 py-2 border rounded-lg">
+                                <option value="nearest">Nearest Driver</option>
+                                <option value="round_robin">Round Robin</option>
+                                <option value="rating_based">Rating Based</option>
+                                <option value="combined">Combined (Nearest + Rating)</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Min Driver Rating</label>
+                                <input v-model="settings.min_driver_rating" type="number" step="0.1" min="0" max="5" class="w-full px-4 py-2 border rounded-lg">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Search Radius (km)</label>
+                                <input v-model="settings.search_radius_km" type="number" step="1" min="1" class="w-full px-4 py-2 border rounded-lg">
+                            </div>
+                        </div>
+                        <button @click="saveSettings" class="bg-red-500 text-white px-6 py-2 rounded-lg font-medium hover:bg-red-600">Save Settings</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Service Areas -->
+            <div v-if="tab === 'areas'">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold">Service Areas (Geo-fencing)</h2>
+                    <button @click="showAreaModal = true" class="bg-red-500 text-white px-4 py-2 rounded-lg font-medium">+ Add Area</button>
+                </div>
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">City</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr v-for="area in areas" :key="area.id">
+                                <td class="px-6 py-4 font-medium">{{ area.name }}</td>
+                                <td class="px-6 py-4">{{ area.city }}</td>
+                                <td class="px-6 py-4">
+                                    <span :class="area.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'" class="px-2 py-1 rounded text-xs">{{ area.is_active ? 'Active' : 'Inactive' }}</span>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <button @click="deleteArea(area.id)" class="text-red-500 text-sm">Delete</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Vehicle Types -->
+            <div v-if="tab === 'vehicles'">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold">Vehicle Types</h2>
+                    <button @click="showVehicleModal = true" class="bg-red-500 text-white px-4 py-2 rounded-lg font-medium">+ Add Vehicle Type</button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div v-for="vt in vehicleTypes" :key="vt.id" class="bg-white rounded-lg p-6 shadow">
+                        <h3 class="font-bold text-lg">{{ vt.name }}</h3>
+                        <p class="text-gray-500 text-sm mt-1">{{ vt.description }}</p>
+                        <p class="text-sm mt-2">Capacity: {{ vt.capacity }} seats</p>
+                        <div class="mt-4 flex gap-2">
+                            <button @click="deleteVehicleType(vt.id)" class="text-red-500 text-sm">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fare Config -->
+            <div v-if="tab === 'fares'">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold">Fare Configuration</h2>
+                    <button @click="showFareModal = true" class="bg-red-500 text-white px-4 py-2 rounded-lg font-medium">+ Add Fare</button>
+                </div>
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Area</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Base</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Per KM</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Per Min</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Min Fare</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr v-for="fare in fares" :key="fare.id">
+                                <td class="px-6 py-4">{{ getAreaName(fare.service_area_id) }}</td>
+                                <td class="px-6 py-4">{{ getVehicleName(fare.vehicle_type_id) }}</td>
+                                <td class="px-6 py-4">${{ fare.base_fare }}</td>
+                                <td class="px-6 py-4">${{ fare.per_km_rate }}</td>
+                                <td class="px-6 py-4">${{ fare.per_minute_rate }}</td>
+                                <td class="px-6 py-4">${{ fare.minimum_fare }}</td>
+                                <td class="px-6 py-4">
+                                    <button @click="deleteFare(fare.id)" class="text-red-500 text-sm">Delete</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Rides -->
+            <div v-if="tab === 'rides'">
+                <h2 class="text-xl font-bold mb-6">Recent Rides</h2>
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pickup</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dropoff</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fare</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr v-for="ride in rides" :key="ride.id">
+                                <td class="px-6 py-4 text-sm">{{ ride.id.substring(0, 8) }}...</td>
+                                <td class="px-6 py-4 text-sm">{{ ride.pickup_address }}</td>
+                                <td class="px-6 py-4 text-sm">{{ ride.dropoff_address }}</td>
+                                <td class="px-6 py-4">${{ ride.total_fare }}</td>
+                                <td class="px-6 py-4">
+                                    <span :class="getStatusClass(ride.status)" class="px-2 py-1 rounded text-xs">{{ ride.status }}</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Drivers -->
+            <div v-if="tab === 'drivers'">
+                <h2 class="text-xl font-bold mb-6">Drivers</h2>
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rides</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr v-for="driver in drivers" :key="driver.id">
+                                <td class="px-6 py-4 font-medium">{{ driver.name }}</td>
+                                <td class="px-6 py-4">{{ driver.vehicle_make }} {{ driver.vehicle_model }} ({{ driver.license_plate }})</td>
+                                <td class="px-6 py-4">{{ driver.rating }} ⭐</td>
+                                <td class="px-6 py-4">{{ driver.total_rides }}</td>
+                                <td class="px-6 py-4">
+                                    <span :class="driver.is_online ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'" class="px-2 py-1 rounded text-xs">{{ driver.is_online ? 'Online' : 'Offline' }}</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+
+        <!-- Area Modal -->
+        <div v-if="showAreaModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                <h3 class="text-lg font-bold mb-4">Add Service Area</h3>
+                <div class="space-y-4">
+                    <input v-model="newArea.name" type="text" placeholder="Area Name" class="w-full px-4 py-2 border rounded-lg">
+                    <select v-model="newArea.city" class="w-full px-4 py-2 border rounded-lg">
+                        <option value="">Select City</option>
+                        <option value="Saskatoon">Saskatoon</option>
+                        <option value="Regina">Regina</option>
+                    </select>
+                    <p class="text-sm text-gray-500">Polygon coordinates (lat,lng pairs):</p>
+                    <textarea v-model="newArea.polygonText" rows="4" placeholder="52.18,-106.75&#10;52.18,-106.55&#10;52.08,-106.55&#10;52.08,-106.75" class="w-full px-4 py-2 border rounded-lg font-mono text-sm"></textarea>
+                </div>
+                <div class="mt-6 flex gap-4">
+                    <button @click="showAreaModal = false" class="px-4 py-2 border rounded-lg">Cancel</button>
+                    <button @click="addArea" class="bg-red-500 text-white px-4 py-2 rounded-lg">Add Area</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vehicle Modal -->
+        <div v-if="showVehicleModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                <h3 class="text-lg font-bold mb-4">Add Vehicle Type</h3>
+                <div class="space-y-4">
+                    <input v-model="newVehicle.name" type="text" placeholder="Name (e.g., Spinr Go)" class="w-full px-4 py-2 border rounded-lg">
+                    <input v-model="newVehicle.description" type="text" placeholder="Description" class="w-full px-4 py-2 border rounded-lg">
+                    <input v-model="newVehicle.capacity" type="number" placeholder="Capacity" class="w-full px-4 py-2 border rounded-lg">
+                </div>
+                <div class="mt-6 flex gap-4">
+                    <button @click="showVehicleModal = false" class="px-4 py-2 border rounded-lg">Cancel</button>
+                    <button @click="addVehicle" class="bg-red-500 text-white px-4 py-2 rounded-lg">Add Vehicle</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fare Modal -->
+        <div v-if="showFareModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                <h3 class="text-lg font-bold mb-4">Add Fare Config</h3>
+                <div class="space-y-4">
+                    <select v-model="newFare.service_area_id" class="w-full px-4 py-2 border rounded-lg">
+                        <option value="">Select Service Area</option>
+                        <option v-for="area in areas" :key="area.id" :value="area.id">{{ area.name }}</option>
+                    </select>
+                    <select v-model="newFare.vehicle_type_id" class="w-full px-4 py-2 border rounded-lg">
+                        <option value="">Select Vehicle Type</option>
+                        <option v-for="vt in vehicleTypes" :key="vt.id" :value="vt.id">{{ vt.name }}</option>
+                    </select>
+                    <div class="grid grid-cols-2 gap-4">
+                        <input v-model="newFare.base_fare" type="number" step="0.01" placeholder="Base Fare" class="px-4 py-2 border rounded-lg">
+                        <input v-model="newFare.per_km_rate" type="number" step="0.01" placeholder="Per KM" class="px-4 py-2 border rounded-lg">
+                        <input v-model="newFare.per_minute_rate" type="number" step="0.01" placeholder="Per Min" class="px-4 py-2 border rounded-lg">
+                        <input v-model="newFare.minimum_fare" type="number" step="0.01" placeholder="Min Fare" class="px-4 py-2 border rounded-lg">
+                    </div>
+                </div>
+                <div class="mt-6 flex gap-4">
+                    <button @click="showFareModal = false" class="px-4 py-2 border rounded-lg">Cancel</button>
+                    <button @click="addFare" class="bg-red-500 text-white px-4 py-2 rounded-lg">Add Fare</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        createApp({
+            data() {
+                return {
+                    tab: 'dashboard',
+                    settings: {},
+                    areas: [],
+                    vehicleTypes: [],
+                    fares: [],
+                    rides: [],
+                    drivers: [],
+                    stats: {},
+                    showAreaModal: false,
+                    showVehicleModal: false,
+                    showFareModal: false,
+                    newArea: { name: '', city: '', polygonText: '' },
+                    newVehicle: { name: '', description: '', capacity: 4, icon: 'car' },
+                    newFare: { service_area_id: '', vehicle_type_id: '', base_fare: 0, per_km_rate: 0, per_minute_rate: 0, minimum_fare: 0, booking_fee: 2 }
+                }
+            },
+            async mounted() {
+                await this.loadAll();
+            },
+            methods: {
+                async loadAll() {
+                    await Promise.all([
+                        this.loadSettings(),
+                        this.loadAreas(),
+                        this.loadVehicleTypes(),
+                        this.loadFares(),
+                        this.loadRides(),
+                        this.loadDrivers(),
+                        this.loadStats()
+                    ]);
+                },
+                async loadSettings() {
+                    const res = await fetch('/api/admin/settings');
+                    this.settings = await res.json();
+                },
+                async loadAreas() {
+                    const res = await fetch('/api/admin/service-areas');
+                    this.areas = await res.json();
+                },
+                async loadVehicleTypes() {
+                    const res = await fetch('/api/admin/vehicle-types');
+                    this.vehicleTypes = await res.json();
+                },
+                async loadFares() {
+                    const res = await fetch('/api/admin/fare-configs');
+                    this.fares = await res.json();
+                },
+                async loadRides() {
+                    const res = await fetch('/api/admin/rides');
+                    this.rides = await res.json();
+                },
+                async loadDrivers() {
+                    const res = await fetch('/api/admin/drivers');
+                    this.drivers = await res.json();
+                },
+                async loadStats() {
+                    const res = await fetch('/api/admin/stats');
+                    this.stats = await res.json();
+                },
+                async saveSettings() {
+                    await fetch('/api/admin/settings', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(this.settings)
+                    });
+                    alert('Settings saved!');
+                },
+                async addArea() {
+                    const lines = this.newArea.polygonText.trim().split('\\n');
+                    const polygon = lines.map(line => {
+                        const [lat, lng] = line.split(',').map(Number);
+                        return { lat, lng };
+                    });
+                    await fetch('/api/admin/service-areas', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...this.newArea, polygon, is_active: true })
+                    });
+                    this.showAreaModal = false;
+                    this.newArea = { name: '', city: '', polygonText: '' };
+                    await this.loadAreas();
+                },
+                async deleteArea(id) {
+                    if (confirm('Delete this area?')) {
+                        await fetch(`/api/admin/service-areas/${id}`, { method: 'DELETE' });
+                        await this.loadAreas();
+                    }
+                },
+                async addVehicle() {
+                    await fetch('/api/admin/vehicle-types', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...this.newVehicle, is_active: true })
+                    });
+                    this.showVehicleModal = false;
+                    this.newVehicle = { name: '', description: '', capacity: 4, icon: 'car' };
+                    await this.loadVehicleTypes();
+                },
+                async deleteVehicleType(id) {
+                    if (confirm('Delete this vehicle type?')) {
+                        await fetch(`/api/admin/vehicle-types/${id}`, { method: 'DELETE' });
+                        await this.loadVehicleTypes();
+                    }
+                },
+                async addFare() {
+                    await fetch('/api/admin/fare-configs', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...this.newFare, is_active: true })
+                    });
+                    this.showFareModal = false;
+                    this.newFare = { service_area_id: '', vehicle_type_id: '', base_fare: 0, per_km_rate: 0, per_minute_rate: 0, minimum_fare: 0, booking_fee: 2 };
+                    await this.loadFares();
+                },
+                async deleteFare(id) {
+                    if (confirm('Delete this fare config?')) {
+                        await fetch(`/api/admin/fare-configs/${id}`, { method: 'DELETE' });
+                        await this.loadFares();
+                    }
+                },
+                getAreaName(id) {
+                    const area = this.areas.find(a => a.id === id);
+                    return area ? area.name : id;
+                },
+                getVehicleName(id) {
+                    const vt = this.vehicleTypes.find(v => v.id === id);
+                    return vt ? vt.name : id;
+                },
+                getStatusClass(status) {
+                    const classes = {
+                        'searching': 'bg-yellow-100 text-yellow-700',
+                        'driver_assigned': 'bg-blue-100 text-blue-700',
+                        'driver_arrived': 'bg-purple-100 text-purple-700',
+                        'in_progress': 'bg-green-100 text-green-700',
+                        'completed': 'bg-gray-100 text-gray-700',
+                        'cancelled': 'bg-red-100 text-red-700'
+                    };
+                    return classes[status] || 'bg-gray-100';
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
+"""
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_panel():
+    return ADMIN_HTML
 
 # ============ Seed Default Data ============
 
 @api_router.post("/seed-defaults")
 async def seed_default_data():
-    """Seed default vehicle types and demo data"""
-    # Check if already seeded
     existing = await db.vehicle_types.find_one()
     if existing:
         return {'message': 'Already seeded'}
     
-    # Create default vehicle types
     vehicle_types = [
         VehicleType(id='spinr-go', name='Spinr Go', description='Affordable rides', icon='car', capacity=4),
         VehicleType(id='spinr-xl', name='Spinr XL', description='Extra space for groups', icon='car-sport', capacity=6),
@@ -839,7 +1513,6 @@ async def seed_default_data():
     for vt in vehicle_types:
         await db.vehicle_types.insert_one(vt.dict())
     
-    # Create default service areas (Saskatchewan)
     saskatoon_area = ServiceArea(
         id='saskatoon',
         name='Saskatoon',
@@ -867,13 +1540,10 @@ async def seed_default_data():
     await db.service_areas.insert_one(saskatoon_area.dict())
     await db.service_areas.insert_one(regina_area.dict())
     
-    # Create default fare configs
     fare_configs = [
-        # Saskatoon fares
         FareConfig(service_area_id='saskatoon', vehicle_type_id='spinr-go', base_fare=3.50, per_km_rate=1.50, per_minute_rate=0.25, minimum_fare=8.00),
         FareConfig(service_area_id='saskatoon', vehicle_type_id='spinr-xl', base_fare=5.00, per_km_rate=2.00, per_minute_rate=0.35, minimum_fare=12.00),
         FareConfig(service_area_id='saskatoon', vehicle_type_id='spinr-comfort', base_fare=4.50, per_km_rate=1.80, per_minute_rate=0.30, minimum_fare=10.00),
-        # Regina fares
         FareConfig(service_area_id='regina', vehicle_type_id='spinr-go', base_fare=3.00, per_km_rate=1.40, per_minute_rate=0.22, minimum_fare=7.50),
         FareConfig(service_area_id='regina', vehicle_type_id='spinr-xl', base_fare=4.50, per_km_rate=1.90, per_minute_rate=0.32, minimum_fare=11.00),
         FareConfig(service_area_id='regina', vehicle_type_id='spinr-comfort', base_fare=4.00, per_km_rate=1.70, per_minute_rate=0.28, minimum_fare=9.50),
