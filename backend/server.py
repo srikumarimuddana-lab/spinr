@@ -1637,26 +1637,107 @@ ADMIN_HTML = """
 
             <!-- Drivers -->
             <div v-if="tab === 'drivers'">
-                <h2 class="text-xl font-bold mb-6">Drivers</h2>
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold">Drivers</h2>
+                    <button @click="downloadDrivers" class="bg-green-500 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Download CSV
+                    </button>
+                </div>
                 <div class="bg-white rounded-lg shadow overflow-hidden">
                     <table class="w-full">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rides</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rides</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y">
                             <tr v-for="driver in drivers" :key="driver.id">
-                                <td class="px-6 py-4 font-medium">{{ driver.name }}</td>
-                                <td class="px-6 py-4">{{ driver.vehicle_make }} {{ driver.vehicle_model }} ({{ driver.license_plate }})</td>
-                                <td class="px-6 py-4">{{ driver.rating }} ⭐</td>
-                                <td class="px-6 py-4">{{ driver.total_rides }}</td>
-                                <td class="px-6 py-4">
+                                <td class="px-4 py-4 font-medium">{{ driver.name }}</td>
+                                <td class="px-4 py-4 text-sm">{{ driver.vehicle_make }} {{ driver.vehicle_model }} ({{ driver.license_plate }})</td>
+                                <td class="px-4 py-4">{{ driver.rating }} ⭐</td>
+                                <td class="px-4 py-4">{{ driver.total_rides }}</td>
+                                <td class="px-4 py-4">
                                     <span :class="driver.is_online ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'" class="px-2 py-1 rounded text-xs">{{ driver.is_online ? 'Online' : 'Offline' }}</span>
+                                </td>
+                                <td class="px-4 py-4">
+                                    <button @click="viewDriverRides(driver)" class="text-blue-500 text-sm">View Rides</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Earnings -->
+            <div v-if="tab === 'earnings'">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold">Earnings Breakdown</h2>
+                    <button @click="downloadEarnings" class="bg-green-500 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Download CSV
+                    </button>
+                </div>
+                
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-green-50 rounded-lg p-4 border border-green-200">
+                        <p class="text-green-600 text-sm font-medium">Driver Earnings</p>
+                        <p class="text-2xl font-bold text-green-700">${{ stats.total_driver_earnings || '0.00' }}</p>
+                        <p class="text-xs text-green-500 mt-1">100% of trip fare goes to drivers</p>
+                    </div>
+                    <div class="bg-red-50 rounded-lg p-4 border border-red-200">
+                        <p class="text-red-600 text-sm font-medium">Platform Earnings</p>
+                        <p class="text-2xl font-bold text-red-700">${{ stats.total_admin_earnings || '0.00' }}</p>
+                        <p class="text-xs text-red-500 mt-1">Booking fees + cancellation fees</p>
+                    </div>
+                    <div class="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+                        <p class="text-yellow-600 text-sm font-medium">Total Tips</p>
+                        <p class="text-2xl font-bold text-yellow-700">${{ stats.total_tips || '0.00' }}</p>
+                        <p class="text-xs text-yellow-500 mt-1">100% of tips go to drivers</p>
+                    </div>
+                    <div class="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                        <p class="text-blue-600 text-sm font-medium">Total Revenue</p>
+                        <p class="text-2xl font-bold text-blue-700">${{ ((stats.total_driver_earnings || 0) + (stats.total_admin_earnings || 0)).toFixed(2) }}</p>
+                        <p class="text-xs text-blue-500 mt-1">All rides combined</p>
+                    </div>
+                </div>
+                
+                <!-- Earnings Table -->
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ride ID</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Fare</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Driver Gets</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Platform Gets</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tip</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cancel Fees</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            <tr v-for="ride in rides" :key="ride.id">
+                                <td class="px-4 py-4 text-sm font-mono">{{ ride.id.substring(0, 8) }}...</td>
+                                <td class="px-4 py-4">
+                                    <span :class="getStatusClass(ride.status)" class="px-2 py-1 rounded text-xs">{{ ride.status }}</span>
+                                </td>
+                                <td class="px-4 py-4 font-medium">${{ ride.total_fare || 0 }}</td>
+                                <td class="px-4 py-4 text-green-600 font-medium">${{ ((ride.driver_earnings || 0) + (ride.tip_amount || 0)).toFixed(2) }}</td>
+                                <td class="px-4 py-4 text-red-600">${{ ride.admin_earnings || 0 }}</td>
+                                <td class="px-4 py-4 text-yellow-600">${{ ride.tip_amount || 0 }}</td>
+                                <td class="px-4 py-4 text-sm">
+                                    <span v-if="ride.cancellation_fee_admin > 0">
+                                        Admin: ${{ ride.cancellation_fee_admin }}<br>
+                                        Driver: ${{ ride.cancellation_fee_driver }}
+                                    </span>
+                                    <span v-else class="text-gray-400">-</span>
                                 </td>
                             </tr>
                         </tbody>
