@@ -92,28 +92,28 @@ export default function HomeScreen() {
         <View style={styles.sheetHandle} />
 
         {/* Search Bar */}
-        <TouchableOpacity style={styles.searchBar}>
+        <TouchableOpacity style={styles.searchBar} onPress={handleSearchPress}>
           <Ionicons name="search" size={22} color={SpinrConfig.theme.colors.primary} />
           <Text style={styles.searchPlaceholder}>Where to?</Text>
         </TouchableOpacity>
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.quickAction}>
+          <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('home')}>
             <View style={styles.quickActionIcon}>
               <Ionicons name="home" size={22} color={SpinrConfig.theme.colors.primary} />
             </View>
             <Text style={styles.quickActionText}>Home</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.quickAction}>
+          <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('work')}>
             <View style={styles.quickActionIcon}>
               <Ionicons name="briefcase" size={22} color={SpinrConfig.theme.colors.primary} />
             </View>
             <Text style={styles.quickActionText}>Work</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.quickAction}>
+          <TouchableOpacity style={styles.quickAction} onPress={() => handleQuickAction('saved')}>
             <View style={styles.quickActionIcon}>
               <Ionicons name="star" size={22} color={SpinrConfig.theme.colors.primary} />
             </View>
