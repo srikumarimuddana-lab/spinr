@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://spinr-ride.preview.emergentagent.com/api"
+BASE_URL = "https://rideshare-app-307.preview.emergentagent.com/api"
 HEADERS = {"Content-Type": "application/json"}
 
 class SpinrAPITester:
