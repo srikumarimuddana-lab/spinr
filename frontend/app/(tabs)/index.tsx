@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,21 +7,38 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
+import { useRideStore } from '../../store/rideStore';
 import SpinrConfig from '../../config/spinr.config';
 
 const { width, height } = Dimensions.get('window');
 
 export default function HomeScreen() {
+  const router = useRouter();
   const { user } = useAuthStore();
+  const { savedAddresses, fetchSavedAddresses } = useRideStore();
   const [showPromo, setShowPromo] = useState(true);
+
+  useEffect(() => {
+    fetchSavedAddresses();
+  }, []);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'GOOD MORNING';
     if (hour < 17) return 'GOOD AFTERNOON';
     return 'GOOD EVENING';
+  };
+
+  const handleSearchPress = () => {
+    router.push('/search-destination');
+  };
+
+  const handleQuickAction = (type: string) => {
+    // Navigate to search with pre-selected type
+    router.push('/search-destination');
   };
 
   return (
