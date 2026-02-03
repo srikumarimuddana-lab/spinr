@@ -105,23 +105,63 @@ export default function DriverArrivingScreen() {
       <View style={styles.bottomSheet}>
         <View style={styles.sheetHandle} />
         
-        {/* Driver Info */}
-        <View style={styles.driverSection}>
-          <View style={styles.driverAvatar}>
-            <Ionicons name="person" size={28} color="#666" />
-            <View style={styles.ratingBadge}>
-              <Ionicons name="star" size={10} color="#FFB800" />
-              <Text style={styles.ratingText}>{currentDriver?.rating || 4.9}</Text>
-            </View>
+        {/* Safety Banner - Share Trip */}
+        <TouchableOpacity style={styles.shareTripBanner} onPress={handleShareTrip}>
+          <View style={styles.shareTripIcon}>
+            <Ionicons name="share-social" size={18} color="#FFF" />
+          </View>
+          <View style={styles.shareTripContent}>
+            <Text style={styles.shareTripTitle}>Share your trip</Text>
+            <Text style={styles.shareTripSubtitle}>Let friends & family track your live location</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={SpinrConfig.theme.colors.primary} />
+        </TouchableOpacity>
+
+        {/* Driver Details Card - Comprehensive for Screenshot */}
+        <View style={styles.driverDetailsCard}>
+          <View style={styles.driverCardHeader}>
+            <Text style={styles.driverCardTitle}>YOUR DRIVER</Text>
+            <TouchableOpacity style={styles.copyButton} onPress={handleCopyDetails}>
+              <Ionicons name="copy-outline" size={16} color="#666" />
+              <Text style={styles.copyText}>Copy Details</Text>
+            </TouchableOpacity>
           </View>
           
-          <View style={styles.driverInfo}>
-            <Text style={styles.driverName}>{currentDriver?.name || 'John D.'}</Text>
-            <Text style={styles.vehicleInfo}>
-              {currentDriver?.vehicle_color || 'Grey'} {currentDriver?.vehicle_make || 'Honda'} {currentDriver?.vehicle_model || 'Civic'}
-            </Text>
-            <View style={styles.plateContainer}>
-              <Text style={styles.plateText}>{currentDriver?.license_plate || 'SK-123-ABC'}</Text>
+          <View style={styles.driverSection}>
+            <View style={styles.driverAvatar}>
+              <Ionicons name="person" size={28} color="#666" />
+              <View style={styles.ratingBadge}>
+                <Ionicons name="star" size={10} color="#FFB800" />
+                <Text style={styles.ratingText}>{currentDriver?.rating || 4.9}</Text>
+              </View>
+            </View>
+            
+            <View style={styles.driverInfo}>
+              <Text style={styles.driverName}>{currentDriver?.name || 'John D.'}</Text>
+              <Text style={styles.totalTrips}>{currentDriver?.total_rides || 1247} trips completed</Text>
+            </View>
+          </View>
+
+          {/* Vehicle Details - Clear for Screenshot */}
+          <View style={styles.vehicleSection}>
+            <View style={styles.vehicleRow}>
+              <Ionicons name="car" size={20} color={SpinrConfig.theme.colors.primary} />
+              <View style={styles.vehicleTextContainer}>
+                <Text style={styles.vehicleLabel}>VEHICLE</Text>
+                <Text style={styles.vehicleValue}>
+                  {currentDriver?.vehicle_color || 'Grey'} {currentDriver?.vehicle_make || 'Honda'} {currentDriver?.vehicle_model || 'Civic'}
+                </Text>
+              </View>
+            </View>
+            
+            <View style={styles.plateRow}>
+              <View style={styles.plateIconContainer}>
+                <Text style={styles.plateIcon}>🪪</Text>
+              </View>
+              <View style={styles.vehicleTextContainer}>
+                <Text style={styles.vehicleLabel}>LICENSE PLATE</Text>
+                <Text style={styles.plateValue}>{currentDriver?.license_plate || 'SK-123-ABC'}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -130,11 +170,15 @@ export default function DriverArrivingScreen() {
         <View style={styles.actionButtons}>
           <TouchableOpacity style={styles.messageButton} onPress={handleMessage}>
             <Ionicons name="chatbubble" size={20} color="#FFF" />
-            <Text style={styles.messageButtonText}>Message Driver</Text>
+            <Text style={styles.messageButtonText}>Message</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.callButton} onPress={handleCall}>
             <Ionicons name="call" size={22} color="#1A1A1A" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.shareButton} onPress={handleShareTrip}>
+            <Ionicons name="share-outline" size={22} color="#1A1A1A" />
           </TouchableOpacity>
         </View>
 
