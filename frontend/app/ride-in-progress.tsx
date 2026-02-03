@@ -8,6 +8,7 @@ import {
   Share,
   Alert,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,7 @@ export default function RideInProgressScreen() {
   const [eta, setEta] = useState(15);
   const [estimatedTime, setEstimatedTime] = useState('12:45 PM');
   const [currentLocation, setCurrentLocation] = useState('4th Avenue North');
+  const [isSharingLocation, setIsSharingLocation] = useState(false);
 
   useEffect(() => {
     if (rideId) {
