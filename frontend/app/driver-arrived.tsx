@@ -135,45 +135,70 @@ I'm sharing this ride for safety. Screenshot this info!
           <Text style={styles.otpHint}>Driver will enter this to start the trip</Text>
         </View>
         
-        {/* Driver Info */}
-        <View style={styles.driverSection}>
-          <View style={styles.driverAvatar}>
-            <Ionicons name="person" size={28} color="#666" />
-            <View style={styles.ratingBadge}>
-              <Ionicons name="star" size={10} color="#FFB800" />
-              <Text style={styles.ratingText}>{currentDriver?.rating || 4.9}</Text>
-            </View>
+        {/* Driver Details Card - Comprehensive for Screenshot */}
+        <View style={styles.driverDetailsCard}>
+          <View style={styles.driverCardHeader}>
+            <Text style={styles.driverCardTitle}>DRIVER DETAILS</Text>
+            <TouchableOpacity style={styles.copyButton} onPress={handleCopyDetails}>
+              <Ionicons name="copy-outline" size={14} color="#666" />
+              <Text style={styles.copyText}>Copy</Text>
+            </TouchableOpacity>
           </View>
-          
-          <View style={styles.driverInfo}>
-            <Text style={styles.driverName}>{currentDriver?.name || 'John D.'}</Text>
-            <View style={styles.arrivedIndicator}>
-              <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-              <Text style={styles.arrivedIndicatorText}>Arrived at pickup</Text>
-            </View>
-          </View>
-          
-          <TouchableOpacity style={styles.callButton} onPress={handleCall}>
-            <Ionicons name="call" size={22} color={SpinrConfig.theme.colors.primary} />
-          </TouchableOpacity>
-        </View>
 
-        {/* Vehicle Info */}
-        <View style={styles.vehicleCard}>
-          <View>
-            <Text style={styles.vehicleName}>
-              {currentDriver?.vehicle_color || 'Grey'} {currentDriver?.vehicle_make || 'Honda'} {currentDriver?.vehicle_model || 'Civic'}
-            </Text>
-            <Text style={styles.plateText}>{currentDriver?.license_plate || 'SK-123-ABC'}</Text>
+          <View style={styles.driverSection}>
+            <View style={styles.driverAvatar}>
+              <Ionicons name="person" size={28} color="#666" />
+              <View style={styles.ratingBadge}>
+                <Ionicons name="star" size={10} color="#FFB800" />
+                <Text style={styles.ratingText}>{currentDriver?.rating || 4.9}</Text>
+              </View>
+            </View>
+            
+            <View style={styles.driverInfo}>
+              <Text style={styles.driverName}>{currentDriver?.name || 'John D.'}</Text>
+              <Text style={styles.totalTrips}>{currentDriver?.total_rides || 1247} trips completed</Text>
+              <View style={styles.arrivedIndicator}>
+                <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                <Text style={styles.arrivedIndicatorText}>Arrived at pickup</Text>
+              </View>
+            </View>
           </View>
-          <Ionicons name="car" size={32} color={SpinrConfig.theme.colors.primary} />
+
+          {/* Vehicle Details */}
+          <View style={styles.vehicleSection}>
+            <View style={styles.vehicleRow}>
+              <Ionicons name="car" size={18} color={SpinrConfig.theme.colors.primary} />
+              <View style={styles.vehicleTextContainer}>
+                <Text style={styles.vehicleLabel}>VEHICLE</Text>
+                <Text style={styles.vehicleValue}>
+                  {currentDriver?.vehicle_color || 'Grey'} {currentDriver?.vehicle_make || 'Honda'} {currentDriver?.vehicle_model || 'Civic'}
+                </Text>
+              </View>
+            </View>
+            
+            <View style={styles.plateRow}>
+              <Text style={styles.plateEmoji}>🪪</Text>
+              <View style={styles.vehicleTextContainer}>
+                <Text style={styles.vehicleLabel}>LICENSE PLATE</Text>
+                <Text style={styles.plateValue}>{currentDriver?.license_plate || 'SK-123-ABC'}</Text>
+              </View>
+            </View>
+          </View>
         </View>
 
         {/* Action Buttons */}
         <View style={styles.actionButtons}>
           <TouchableOpacity style={styles.messageButton} onPress={handleMessage}>
-            <Ionicons name="chatbubble" size={20} color="#FFF" />
-            <Text style={styles.messageButtonText}>Message Driver</Text>
+            <Ionicons name="chatbubble" size={18} color="#FFF" />
+            <Text style={styles.messageButtonText}>Message</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.callButton} onPress={handleCall}>
+            <Ionicons name="call" size={20} color={SpinrConfig.theme.colors.primary} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.shareIconButton} onPress={handleShareTrip}>
+            <Ionicons name="share-outline" size={20} color="#1A1A1A" />
           </TouchableOpacity>
         </View>
 
