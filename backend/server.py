@@ -1429,6 +1429,18 @@ ADMIN_HTML = """
                         <p class="text-gray-500 text-sm">Completed Rides</p>
                         <p class="text-3xl font-bold">{{ stats.completed_rides || 0 }}</p>
                     </div>
+                    <div class="bg-white rounded-lg p-6 shadow border-l-4 border-green-500">
+                        <p class="text-gray-500 text-sm">Total Driver Earnings</p>
+                        <p class="text-3xl font-bold text-green-600">${{ stats.total_driver_earnings || '0.00' }}</p>
+                    </div>
+                    <div class="bg-white rounded-lg p-6 shadow border-l-4 border-red-500">
+                        <p class="text-gray-500 text-sm">Admin/Platform Earnings</p>
+                        <p class="text-3xl font-bold text-red-600">${{ stats.total_admin_earnings || '0.00' }}</p>
+                    </div>
+                    <div class="bg-white rounded-lg p-6 shadow border-l-4 border-yellow-500">
+                        <p class="text-gray-500 text-sm">Total Tips</p>
+                        <p class="text-3xl font-bold text-yellow-600">${{ stats.total_tips || '0.00' }}</p>
+                    </div>
                 </div>
             </div>
 
