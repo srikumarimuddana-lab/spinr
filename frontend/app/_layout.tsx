@@ -51,6 +51,10 @@ export default function RootLayout() {
         <Stack.Screen name="otp" />
         <Stack.Screen name="profile-setup" />
         <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+        <Stack.Screen name="search-destination" options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="ride-options" />
+        <Stack.Screen name="payment-confirm" />
+        <Stack.Screen name="ride-status" options={{ gestureEnabled: false }} />
       </Stack>
     </SafeAreaProvider>
   );
