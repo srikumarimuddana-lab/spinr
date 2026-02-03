@@ -56,6 +56,42 @@ export default function DriverArrivingScreen() {
     // Initiate call
   };
 
+  const handleShareTrip = async () => {
+    const driverInfo = `
+🚗 SPINR RIDE - TRIP DETAILS
+
+👤 DRIVER: ${currentDriver?.name || 'John D.'}
+⭐ RATING: ${currentDriver?.rating || 4.9}/5
+
+🚙 VEHICLE: ${currentDriver?.vehicle_color || 'Grey'} ${currentDriver?.vehicle_make || 'Honda'} ${currentDriver?.vehicle_model || 'Civic'}
+📋 LICENSE PLATE: ${currentDriver?.license_plate || 'SK-123-ABC'}
+
+📍 PICKUP: ${currentRide?.pickup_address || 'University of Saskatchewan'}
+📍 DESTINATION: ${currentRide?.dropoff_address || '123 Main St, Saskatoon'}
+
+⏱️ ETA: ${eta} minutes
+
+Track my live location: spinr://track/${rideId || 'demo'}
+
+I'm sharing this ride for safety. If you don't hear from me, please check on me.
+    `.trim();
+
+    try {
+      await Share.share({
+        message: driverInfo,
+        title: 'My Spinr Ride Details',
+      });
+    } catch (error) {
+      console.log('Share error:', error);
+    }
+  };
+
+  const handleCopyDetails = async () => {
+    const details = `Driver: ${currentDriver?.name || 'John D.'} | Vehicle: ${currentDriver?.vehicle_color || 'Grey'} ${currentDriver?.vehicle_make || 'Honda'} ${currentDriver?.vehicle_model || 'Civic'} | Plate: ${currentDriver?.license_plate || 'SK-123-ABC'} | Rating: ${currentDriver?.rating || 4.9}⭐`;
+    await Clipboard.setStringAsync(details);
+    Alert.alert('Copied!', 'Driver details copied to clipboard');
+  };
+
   const handleSimulateArrival = async () => {
     await simulateDriverArrival();
   };
