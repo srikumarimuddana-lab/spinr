@@ -715,11 +715,16 @@ async def create_ride(request: CreateRideRequest, current_user: dict = Depends(g
     if not fare_info:
         raise HTTPException(status_code=400, detail='Invalid vehicle type')
     
-    total_fare = fare_info['base_fare'] + \
-                 (fare_info['per_km_rate'] * distance_km) + \
-                 (fare_info['per_minute_rate'] * duration_minutes) + \
-                 fare_info['booking_fee']
+    distance_fare = fare_info['per_km_rate'] * distance_km
+    time_fare = fare_info['per_minute_rate'] * duration_minutes
+    booking_fee = fare_info.get('booking_fee', 2.0)
+    
+    total_fare = fare_info['base_fare'] + distance_fare + time_fare + booking_fee
     total_fare = max(total_fare, fare_info['minimum_fare'])
+    
+    # Earnings split: Distance fare goes to driver, booking fee goes to admin
+    driver_earnings = fare_info['base_fare'] + distance_fare + time_fare
+    admin_earnings = booking_fee
     
     ride = Ride(
         rider_id=current_user['id'],
@@ -733,10 +738,16 @@ async def create_ride(request: CreateRideRequest, current_user: dict = Depends(g
         distance_km=round(distance_km, 2),
         duration_minutes=duration_minutes,
         base_fare=fare_info['base_fare'],
+        distance_fare=round(distance_fare, 2),
+        time_fare=round(time_fare, 2),
+        booking_fee=booking_fee,
         total_fare=round(total_fare, 2),
+        driver_earnings=round(driver_earnings, 2),
+        admin_earnings=round(admin_earnings, 2),
         payment_method=request.payment_method,
         status='searching',
-        pickup_otp=generate_otp()
+        pickup_otp=generate_otp(),
+        ride_requested_at=datetime.utcnow()
     )
     
     await db.rides.insert_one(ride.dict())
