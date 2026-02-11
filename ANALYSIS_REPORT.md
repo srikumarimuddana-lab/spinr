@@ -90,6 +90,7 @@ Long-term (low priority / strategic)
 - Enforced role checks on `start` and `complete` ride endpoints so only authorized drivers (or owning riders where allowed) can trigger those actions.
 - Implemented atomic driver claiming in `match_driver_to_ride` to reduce race conditions and prevent double assignments.
 - Added basic rate-limiting using `slowapi` for `/auth/send-otp` (5/min) and `/auth/verify-otp` (10/min) to mitigate abuse.
+- CI now generates `junit.xml` (pytest `--junitxml`) and uploads it as a workflow artifact for test reporting.
 
 > ⚠️ Note: these changes require Firebase credentials and some behavior changes on the mobile app (send an `auth` message with a token upon opening the WebSocket). I recommend deploying to a staging environment and testing mobile clients against it.
 
@@ -109,6 +110,26 @@ python -m pip install -r requirements.txt
 # then run
 uvicorn server:app --reload --port 8000
 ```
+
+---
+## CI usage: test annotation & failure threshold 📋
+
+You can control which tests are annotated in PRs and optionally fail the CI job when test failures exceed a threshold using two env variables in the workflow or when triggering the job:
+
+- **ANNOTATE_TESTS_PATTERN** (string)
+  - If non-empty, the workflow runs a filtered test pass (`pytest -k "<pattern>"`) and annotates only those results (produced in `annotate_junit.xml`).
+  - Example: `ANNOTATE_TESTS_PATTERN="rate_limit or smoke"`
+  - Use this to focus PR annotations on a subset of tests (slow/flaky groups) without annotating the entire test suite.
+
+- **FAIL_THRESHOLD** (integer, default `-1` = disabled)
+  - If set to a non-negative integer, CI will fail when total failures+errors in the main `junit.xml` exceed this value.
+  - Example: `FAIL_THRESHOLD=2` — job fails when >2 failures are detected.
+
+How to set these for a specific run:
+- Add them to your workflow dispatch inputs or temporarily set them in the workflow job environment for a branch.
+- For quick local testing (not recommended for PR annotations), export them in the environment when running the workflow runner.
+
+These variables give fine-grained control over PR noise and enable stricter gating in CI when needed.
 
 ---
 Report generated automatically from quick repo inspection. If you'd like, I can continue with the next prioritized tasks (Supabase migration, FCM integration, rate-limiting) and open a PR with tests and documentation for each change. Tell me which to start next.
