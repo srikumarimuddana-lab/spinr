@@ -21,7 +21,7 @@ This repository contains a full-stack rideshare application built with React Nat
 
 *   **Frontend (Expo Web)**: Deployed to **Vercel** as a Static Site (SPA).
 *   **Admin Dashboard (Next.js)**: Deployed to **Vercel** (Serverless).
-*   **Backend (Python/FastAPI)**: Deployed to **Render** (Web Service).
+*   **Backend (Python/FastAPI)**: Deployed to **Fly.io** (Persistent WebSockets).
 
 See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed step-by-step instructions.
 
