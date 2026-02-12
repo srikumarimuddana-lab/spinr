@@ -45,6 +45,11 @@ class MockCursor:
             limit=limit
         )
 
+    async def __aiter__(self):
+        items = await self.to_list()
+        for item in items:
+            yield item
+
 class Collection:
     def __init__(self, name: str):
         self.name = name
