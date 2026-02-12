@@ -55,8 +55,19 @@ Deploy the Expo Web app as a static site.
     - **Build Command**: `npx expo export --platform web`
     - **Output Directory**: `dist`
 5.  **Environment Variables**:
-    - Add `EXPO_PUBLIC_BACKEND_URL`: The URL of your Fly.io backend (e.g., `https://spinr-backend.fly.dev`).
-    - Add `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`: Your Google Maps API Key.
+    You **MUST** set these environment variables in the Vercel Project Settings for the app to work:
+
+    - `EXPO_PUBLIC_BACKEND_URL`: The URL of your Fly.io backend (e.g., `https://spinr-backend.fly.dev`).
+    - `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`: Your Google Maps API Key.
+
+    **Firebase Configuration (Required):**
+    - `EXPO_PUBLIC_FIREBASE_API_KEY`: Your Firebase Web API Key.
+    - `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`: `your-project.firebaseapp.com`
+    - `EXPO_PUBLIC_FIREBASE_PROJECT_ID`: `your-project-id`
+    - `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`: `your-project.appspot.com`
+    - `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`: Your Sender ID.
+    - `EXPO_PUBLIC_FIREBASE_APP_ID`: Your App ID.
+
 6.  **Deploy**: Click "Deploy".
 
 **Note**: The `vercel.json` file in `frontend/` handles routing rewrites for the SPA.
@@ -79,6 +90,7 @@ Deploy the Next.js admin panel.
 
 ## Troubleshooting
 
+-   **Firebase Error (auth/invalid-api-key)**: Ensure `EXPO_PUBLIC_FIREBASE_API_KEY` is set correctly in Vercel Environment Variables.
 -   **CORS Issues**: Ensure your Backend Environment Variable `ALLOWED_ORIGINS` includes your new Vercel domains.
 -   **Missing API Key**: If maps don't load, verify `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` is set in Vercel.
 -   **WebSockets**: Fly.io supports persistent WebSockets natively. Ensure your client connects via `wss://` if on HTTPS.
